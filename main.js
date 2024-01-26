@@ -1,6 +1,6 @@
 var log = (() => {
 	var logElm = document.createElement("div")
-	logElm.setAttribute("style", `position: absolute; bottom: 0; left: 0;`)
+	logElm.setAttribute("style", `position: absolute; bottom: 0; right: 0;`)
 	document.body.appendChild(logElm)
 	/** @param {string} data */
 	function log(data) {
@@ -41,7 +41,7 @@ function repr(o) {
 }
 
 var theSVG = document.createElementNS("http://www.w3.org/2000/svg", "svg")
-document.body.appendChild(theSVG)
+document.querySelector(".mainContainer")?.appendChild(theSVG)
 
 /**
  * @param {string} path
@@ -199,21 +199,39 @@ async function getMessagesLoop() {
 }
 post("/connect", clientID.toString()).then(() => getMessagesLoop())
 
+/** @type {{ x: number, y: number }} */
+var viewPos = {x: 0, y: 0}
+
 /** @type {{ d: string[], elm: SVGPathElement } | null} */
 var currentPath = null
+/** @type {{ x: number, y: number } | null} */
+var currentDrag = null
+
+function getCurrentMode() {
+	// @ts-ignore
+	return document.querySelector(".menu-option-selected").innerText
+}
+function updateViewPos() {
+	theSVG.setAttribute("style", `position: absolute; top: ${viewPos.y}px; left: ${viewPos.x}px;`)
+}
 
 /**
  * @param {{ x: number, y: number }} pos
  */
 function mousedown(pos) {
-	currentPath = {
-		d: [`M ${pos.x} ${pos.y}`],
-		elm: document.createElementNS("http://www.w3.org/2000/svg", "path")
+	if (getCurrentMode() == "Pen") {
+		currentPath = {
+			d: [`M ${pos.x} ${pos.y}`],
+			elm: document.createElementNS("http://www.w3.org/2000/svg", "path")
+		}
+		currentPath.elm.setAttribute("fill", "none")
+		currentPath.elm.setAttribute("stroke", "red")
+		currentPath.elm.setAttribute("stroke-width", "5")
+		theSVG.appendChild(currentPath.elm)
 	}
-	currentPath.elm.setAttribute("fill", "none")
-	currentPath.elm.setAttribute("stroke", "red")
-	currentPath.elm.setAttribute("stroke-width", "5")
-	theSVG.appendChild(currentPath.elm)
+	if (getCurrentMode() == "Move") {
+		currentDrag = pos
+	}
 }
 
 /**
@@ -223,6 +241,16 @@ function mousemove(pos) {
 	if (currentPath) {
 		currentPath.d.push(` L ${pos.x} ${pos.y}`)
 		currentPath.elm.setAttribute("d", currentPath.d.join(""))
+	}
+	if (currentDrag) {
+		var rel = {
+			x: pos.x - currentDrag.x,
+			y: pos.y - currentDrag.y
+		}
+		viewPos.x += rel.x
+		viewPos.y += rel.y
+		updateViewPos()
+		currentDrag = pos
 	}
 }
 
@@ -245,28 +273,31 @@ function mouseup(pos) {
 		// Reset
 		currentPath = null
 	}
+	if (currentDrag) {
+		currentDrag = null
+	}
 }
 
-document.body.addEventListener("mousedown", (e) => {
+theSVG.parentElement?.addEventListener("mousedown", (e) => {
 	mousedown({
 		x: e.clientX,
 		y: e.clientY
 	});
 });
-document.body.addEventListener("mousemove", (e) => {
+theSVG.parentElement?.addEventListener("mousemove", (e) => {
 	mousemove({
 		x: e.clientX,
 		y: e.clientY
 	});
 });
-document.body.addEventListener("mouseup", (e) => {
+theSVG.parentElement?.addEventListener("mouseup", (e) => {
 	mouseup({
 		x: e.clientX,
 		y: e.clientY
 	});
 });
 
-document.body.addEventListener("touchstart", (e) => {
+theSVG.parentElement?.addEventListener("touchstart", (e) => {
 	e.preventDefault();
 	mousedown({
 		x: e.touches[0].clientX,
@@ -274,7 +305,7 @@ document.body.addEventListener("touchstart", (e) => {
 	});
 	return false
 }, false);
-document.body.addEventListener("touchmove", (e) => {
+theSVG.parentElement?.addEventListener("touchmove", (e) => {
 	e.preventDefault();
 	mousemove({
 		x: e.touches[0].clientX,
@@ -282,12 +313,12 @@ document.body.addEventListener("touchmove", (e) => {
 	});
 	return false
 }, false);
-document.body.addEventListener("touchcancel", (e) => {
+theSVG.parentElement?.addEventListener("touchcancel", (e) => {
 	e.preventDefault();
 	mouseup(null);
 	return false
 }, false);
-document.body.addEventListener("touchend", (e) => {
+theSVG.parentElement?.addEventListener("touchend", (e) => {
 	e.preventDefault();
 	mouseup(null);
 	return false

@@ -10,14 +10,49 @@ body {
 	margin: 0;
 	height: 100%;
 	overflow: hidden;
+	font-family: sans-serif;
 }
-svg {
+.mainContainer {
+	position: absolute;
+	top: 0;
+	left: 0;
 	width: 100%;
 	height: 100%;
+	overflow: hidden;
+}
+svg {
+	position: absolute;
+	width: 100%;
+	height: 100%;
+}
+
+.menu {
+	position: absolute;
+	bottom: 0;
+	left: 0;
+	margin: 1em;
+	border: 1px solid black;
+	border-radius: 1em;
+	overflow: hidden;
+}
+.menu-option {
+	padding: 1em;
+	transition: background 0.3s, color 0.3s;
+	background: white;
+	color: black;
+}
+.menu-option-selected {
+	background: black;
+	color: white;
 }
 		</style>
 	</head>
 	<body>
+		<div class="mainContainer"></div>
+		<div class="menu" onclick="document.querySelector('.menu-option-selected').classList.remove('menu-option-selected'); event.target.classList.add('menu-option-selected');">
+			<div class="menu-option menu-option-selected">Pen</div>
+			<div class="menu-option">Move</div>
+		</div>
 		<script src="main.js"></script>
 	</body>
 </html>
