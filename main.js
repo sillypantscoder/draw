@@ -264,9 +264,10 @@ function erase(pos) {
  * @param {{ x: number, y: number }} pos
  */
 function mousedown(pos) {
+	var realPos = { x: pos.x - viewPos.x, y: pos.y - viewPos.y }
 	if (getCurrentMode() == "Draw") {
 		currentPath = {
-			d: [pos],
+			d: [realPos],
 			elm: document.createElementNS("http://www.w3.org/2000/svg", "path")
 		}
 		currentPath.elm.setAttribute("fill", "none")
@@ -278,7 +279,7 @@ function mousedown(pos) {
 		currentDrag = pos
 	}
 	if (getCurrentMode() == "Erase") {
-		erase(pos)
+		erase(realPos)
 	}
 }
 
@@ -286,8 +287,9 @@ function mousedown(pos) {
  * @param {{ x: number, y: number }} pos
  */
 function mousemove(pos) {
+	var realPos = { x: pos.x - viewPos.x, y: pos.y - viewPos.y }
 	if (currentPath) {
-		currentPath.d.push(pos)
+		currentPath.d.push(realPos)
 		currentPath.elm.setAttribute("d", pointsToPath(currentPath.d))
 	}
 	if (currentDrag) {
@@ -301,7 +303,7 @@ function mousemove(pos) {
 		currentDrag = pos
 	}
 	if (getCurrentMode() == "Erase") {
-		erase(pos)
+		erase(realPos)
 	}
 }
 
