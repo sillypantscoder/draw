@@ -42,6 +42,22 @@ function repr(o) {
 
 var theSVG = document.createElementNS("http://www.w3.org/2000/svg", "svg")
 document.querySelector(".mainContainer")?.appendChild(theSVG)
+theSVG.id = "theSVG"
+
+// Switch tools
+document.querySelector(".menu")?.addEventListener("click", (event) => {
+	/** @type {HTMLElement | null} */
+	// @ts-ignore
+	var menuoption = event.target
+	while (menuoption != null) {
+		if (menuoption.classList.contains("menu-option")) break;
+		menuoption = menuoption.parentElement
+	}
+	if (menuoption != null) {
+		document.querySelector('.menu-option-selected')?.classList.remove('menu-option-selected');
+		menuoption.classList.add("menu-option-selected")
+	}
+}, false)
 
 /**
  * @param {string} path
@@ -244,7 +260,7 @@ var currentDrag = null
 
 function getCurrentMode() {
 	// @ts-ignore
-	return document.querySelector(".menu-option-selected").innerText
+	return document.querySelector(".menu-option-selected").dataset.mode
 }
 function updateViewPos() {
 	theSVG.setAttribute("style", `position: absolute; top: ${viewPos.y}px; left: ${viewPos.x}px;`)
