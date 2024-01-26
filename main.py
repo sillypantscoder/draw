@@ -1,6 +1,7 @@
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import typing
 import json
+import datetime
 
 hostName = "0.0.0.0"
 serverPort = 8059
@@ -21,8 +22,16 @@ class HttpResponse(typing.TypedDict):
 	headers: dict[str, str]
 	content: bytes
 
+class Client(typing.TypedDict):
+	id: int
+	lastTime: datetime.datetime
+	messages: list[dict[str, typing.Any]]
+
 objects: list[dict[str, int | dict[str, str]]] = []
-clients: dict[int, list[str]] = {}
+clients: list[Client] = []
+
+def purgeClientList():
+	pass # TODO
 
 def get(path: str) -> HttpResponse:
 	if path == "/":
@@ -41,6 +50,27 @@ def get(path: str) -> HttpResponse:
 			},
 			"content": read_file("main.js")
 		}
+	elif path.startswith("/messages/"):
+		id = int(path[10:])
+		ci = -1
+		for i in range(len(clients)):
+			if clients[i]["id"] == id:
+				ci = i
+		if ci == -1: return {
+			"status": 404,
+			"headers": {},
+			"content": b""
+		}
+		r = json.dumps(clients[ci]["messages"])
+		clients[ci]["messages"] = []
+		clients[ci]["lastTime"] = datetime.datetime.now()
+		return {
+			"status": 200,
+			"headers": {
+				"Content-Type": "text/json"
+			},
+			"content": r.encode("UTF-8")
+		}
 	else: # 404 page
 		return {
 			"status": 404,
@@ -49,12 +79,36 @@ def get(path: str) -> HttpResponse:
 		}
 
 def post(path: str, body: bytes) -> HttpResponse:
-	if path == "/create_object":
+	if path == "/connect":
+		id = int(body)
+		clients.append({
+			"id": id,
+			"lastTime": datetime.datetime.now(),
+			"messages": [
+				{
+					"type": "create_object",
+					"id": o["id"],
+					"data": o["data"]
+				} for o in objects
+			]
+		})
+		return {
+			"status": 200,
+			"headers": {},
+			"content": b""
+		}
+	elif path == "/create_object":
 		bodydata = json.loads(body)
 		objects.append({
 			"id": bodydata["id"],
 			"data": bodydata["data"]
 		})
+		for i in range(len(clients)):
+			clients[i]["messages"].append({
+				"type": "create_object",
+				"id": bodydata["id"],
+				"data": bodydata["data"]
+			})
 		return {
 			"status": 200,
 			"headers": {},

@@ -1,5 +1,77 @@
+var log = (() => {
+	var logElm = document.createElement("div")
+	logElm.setAttribute("style", `position: absolute; bottom: 0; left: 0;`)
+	document.body.appendChild(logElm)
+	/** @param {string} data */
+	function log(data) {
+		var e = document.createElement("div")
+		logElm.appendChild(e)
+		e.innerText = data
+		setTimeout(() => {
+			e.remove()
+		}, 3000)
+	}
+	return log
+})();
+/**
+ * @param {*} o
+ * @returns {string}
+ */
+function repr(o) {
+	if (typeof o == "string") {
+		return "\"" + o + "\""
+	}
+	if (typeof o == "number") {
+		return o.toString()
+	}
+	if (o instanceof Array) {
+		return "[" + o.map((v) => repr(v)).join(", ") + "]"
+	}
+	// object
+	var keys = Object.keys(o)
+	var r = "{"
+	for (var i = 0; i < keys.length; i++) {
+		if (i != 0) r += ", "
+		r += repr(keys[i])
+		r += ": "
+		r += repr(o[keys[i]])
+	}
+	r += "}"
+	return r
+}
+
 var theSVG = document.createElementNS("http://www.w3.org/2000/svg", "svg")
 document.body.appendChild(theSVG)
+
+/**
+ * @param {string} path
+ * @returns {Promise<string>}
+ */
+function get(path) {
+	return new Promise((resolve) => {
+		var x = new XMLHttpRequest()
+		x.open("GET", path)
+		x.addEventListener("loadend", () => {
+			resolve(x.responseText)
+		})
+		x.send()
+	})
+}
+/**
+ * @param {string} path
+ * @param {string} body
+ * @returns {Promise<void>}
+ */
+function post(path, body) {
+	return new Promise((resolve) => {
+		var x = new XMLHttpRequest()
+		x.open("POST", path)
+		x.addEventListener("loadend", () => {
+			resolve()
+		})
+		x.send(body)
+	})
+}
 
 var clientID = Math.floor(Math.random() * 100000)
 
@@ -24,17 +96,21 @@ class SceneObject {
 	 * @param {Object.<string, any>} data
 	 */
 	static sendCreateObject(id, data) {
-		/** @type {Promise<void>} */
-		var p = new Promise((resolve) => {
-			var x = new XMLHttpRequest()
-			x.open("POST", "/create_object")
-			x.addEventListener("loadend", () => resolve())
-			x.send(JSON.stringify({
-				"id": id,
-				"data": data
-			}))
-		})
-		return p
+		return post("/create_object", JSON.stringify({
+			"id": id,
+			"data": data
+		}))
+	}
+	/**
+	 * @param {Object.<string, any>} data
+	 * @param {number} id
+	 * @returns {SceneObject}
+	 */
+	static createFromDataAndID(data, id) {
+		var objClass = objectTypes[data["type"]]
+		var o = new objClass(id, data)
+		o.add()
+		return o
 	}
 	/**
 	 * @param {Object.<string, any>} data
@@ -42,10 +118,7 @@ class SceneObject {
 	 */
 	static createFromData(data) {
 		var id = Math.floor(Math.random() * 100000)
-		var objClass = objectTypes[data["type"]]
-		var o = new objClass(id, data)
-		o.add()
-		return o
+		return this.createFromDataAndID(data, id)
 	}
 	/**
 	 * @param {Object.<string, any>} data
@@ -91,7 +164,42 @@ var objectTypes = {
 /** @type {SceneObject[]} */
 var objects = []
 
-/** @type {{ d: string, elm: SVGPathElement } | null} */
+/**
+ * @param {number} id
+ * @param {Object.<string, any>} data
+ */
+function importObject(id, data) {
+	for (var i = 0; i < objects.length; i++) {
+		if (objects[i].id == id) {
+			// re-send
+			objects[i].verify()
+			return
+		}
+	}
+	// create the object
+	var o = SceneObject.createFromDataAndID(data, id)
+	o.verify()
+}
+async function getMessages() {
+	var data = await get("/messages/" + clientID)
+	/** @type {({ type: "create_object", id: number, data: Object.<string, any> })[]} */
+	var messages = JSON.parse(data)
+	for (var i = 0; i < messages.length; i++) {
+		var msg = messages[i]
+		if (msg.type == "create_object") {
+			importObject(msg.id, msg.data)
+		}
+	}
+}
+async function getMessagesLoop() {
+	while (true) {
+		await getMessages()
+		await new Promise((resolve) => setTimeout(resolve, 400))
+	}
+}
+post("/connect", clientID.toString()).then(() => getMessagesLoop())
+
+/** @type {{ d: string[], elm: SVGPathElement } | null} */
 var currentPath = null
 
 /**
@@ -99,7 +207,7 @@ var currentPath = null
  */
 function mousedown(pos) {
 	currentPath = {
-		d: `M ${pos.x} ${pos.y}`,
+		d: [`M ${pos.x} ${pos.y}`],
 		elm: document.createElementNS("http://www.w3.org/2000/svg", "path")
 	}
 	currentPath.elm.setAttribute("fill", "none")
@@ -113,8 +221,8 @@ function mousedown(pos) {
  */
 function mousemove(pos) {
 	if (currentPath) {
-		currentPath.d += ` L ${pos.x} ${pos.y}`
-		currentPath.elm.setAttribute("d", currentPath.d)
+		currentPath.d.push(` L ${pos.x} ${pos.y}`)
+		currentPath.elm.setAttribute("d", currentPath.d.join(""))
 	}
 }
 
@@ -128,10 +236,12 @@ function mouseup(pos) {
 		// Remove current display elm
 		currentPath.elm.remove()
 		// Add drawing to screen
-		SceneObject.createAndSendFromData({
-			"type": "drawing",
-			"d": currentPath.d
-		})
+		if (currentPath.d.length > 6) {
+			SceneObject.createAndSendFromData({
+				"type": "drawing",
+				"d": currentPath.d
+			})
+		}
 		// Reset
 		currentPath = null
 	}
