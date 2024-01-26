@@ -295,6 +295,7 @@ function mousedown(pos) {
 		currentDrag = pos
 	}
 	if (getCurrentMode() == "Erase") {
+		currentDrag = pos
 		erase(realPos)
 	}
 }
@@ -309,17 +310,18 @@ function mousemove(pos) {
 		currentPath.elm.setAttribute("d", pointsToPath(currentPath.d))
 	}
 	if (currentDrag) {
-		var rel = {
-			x: pos.x - currentDrag.x,
-			y: pos.y - currentDrag.y
+		if (getCurrentMode() == "Erase") {
+			erase(realPos)
+		} else {
+			var rel = {
+				x: pos.x - currentDrag.x,
+				y: pos.y - currentDrag.y
+			}
+			viewPos.x += rel.x
+			viewPos.y += rel.y
+			updateViewPos()
+			currentDrag = pos
 		}
-		viewPos.x += rel.x
-		viewPos.y += rel.y
-		updateViewPos()
-		currentDrag = pos
-	}
-	if (getCurrentMode() == "Erase") {
-		erase(realPos)
 	}
 }
 
