@@ -75,6 +75,17 @@ function post(path, body) {
 
 var clientID = Math.floor(Math.random() * 100000)
 
+/**
+ * @param {{ x: number, y: number }[]} points
+ */
+function pointsToPath(points) {
+	var r = `M ${points[0].x} ${points[0].y}`
+	for (var i = 1; i < points.length; i++) {
+		r += ` L ${points[i].x} ${points[i].y}`
+	}
+	return r
+}
+
 class SceneObject {
 	/**
 	 * @param {number} id
@@ -90,6 +101,7 @@ class SceneObject {
 	verify() {}
 	remove() {
 		objects.splice(objects.indexOf(this), 1)
+		SceneObject.sendErase(this.id)
 	}
 	/**
 	 * @param {number} id
@@ -100,6 +112,12 @@ class SceneObject {
 			"id": id,
 			"data": data
 		}))
+	}
+	/**
+	 * @param {number} id
+	 */
+	static sendErase(id) {
+		return post("/erase", id.toString())
 	}
 	/**
 	 * @param {Object.<string, any>} data
@@ -127,6 +145,10 @@ class SceneObject {
 		var o = this.createFromData(data)
 		this.sendCreateObject(o.id, data)
 	}
+	/** @param {{ x: number, y: number }} pos */
+	collidepoint(pos) {
+		return true
+	}
 }
 class DrawingObject extends SceneObject {
 	/**
@@ -135,9 +157,10 @@ class DrawingObject extends SceneObject {
 	 */
 	constructor(id, data) {
 		super(id, data)
+		/** @type {{ x: number, y: number }[]} */
 		this.path = data.d
 		this.elm = document.createElementNS("http://www.w3.org/2000/svg", "path")
-		this.elm.setAttribute("d", this.path)
+		this.elm.setAttribute("d", pointsToPath(this.path))
 		this.elm.setAttribute("fill", "none")
 		this.elm.setAttribute("stroke", "black")
 		this.elm.setAttribute("stroke-width", "5")
@@ -153,6 +176,18 @@ class DrawingObject extends SceneObject {
 	remove() {
 		super.remove()
 		this.elm.remove()
+	}
+	/** @param {{ x: number, y: number }} pos */
+	collidepoint(pos) {
+		for (var i = 0; i < this.path.length; i += 3) {
+			var p = this.path[i]
+			var xi = Math.abs(p.x - pos.x)
+			var yi = Math.abs(p.y - pos.y)
+			if (xi < 10 && yi < 10) {
+				return true
+			}
+		}
+		return false
 	}
 }
 
@@ -202,7 +237,7 @@ post("/connect", clientID.toString()).then(() => getMessagesLoop())
 /** @type {{ x: number, y: number }} */
 var viewPos = {x: 0, y: 0}
 
-/** @type {{ d: string[], elm: SVGPathElement } | null} */
+/** @type {{ d: { x: number, y: number }[], elm: SVGPathElement } | null} */
 var currentPath = null
 /** @type {{ x: number, y: number } | null} */
 var currentDrag = null
@@ -215,13 +250,23 @@ function updateViewPos() {
 	theSVG.setAttribute("style", `position: absolute; top: ${viewPos.y}px; left: ${viewPos.x}px;`)
 }
 
+/** @param {{ x: number, y: number }} pos */
+function erase(pos) {
+	var o = [...objects]
+	for (var i = 0; i < o.length; i++) {
+		if (o[i].collidepoint(pos)) {
+			o[i].remove()
+		}
+	}
+}
+
 /**
  * @param {{ x: number, y: number }} pos
  */
 function mousedown(pos) {
-	if (getCurrentMode() == "Pen") {
+	if (getCurrentMode() == "Draw") {
 		currentPath = {
-			d: [`M ${pos.x} ${pos.y}`],
+			d: [pos],
 			elm: document.createElementNS("http://www.w3.org/2000/svg", "path")
 		}
 		currentPath.elm.setAttribute("fill", "none")
@@ -232,6 +277,9 @@ function mousedown(pos) {
 	if (getCurrentMode() == "Move") {
 		currentDrag = pos
 	}
+	if (getCurrentMode() == "Erase") {
+		erase(pos)
+	}
 }
 
 /**
@@ -239,8 +287,8 @@ function mousedown(pos) {
  */
 function mousemove(pos) {
 	if (currentPath) {
-		currentPath.d.push(` L ${pos.x} ${pos.y}`)
-		currentPath.elm.setAttribute("d", currentPath.d.join(""))
+		currentPath.d.push(pos)
+		currentPath.elm.setAttribute("d", pointsToPath(currentPath.d))
 	}
 	if (currentDrag) {
 		var rel = {
@@ -251,6 +299,9 @@ function mousemove(pos) {
 		viewPos.y += rel.y
 		updateViewPos()
 		currentDrag = pos
+	}
+	if (getCurrentMode() == "Erase") {
+		erase(pos)
 	}
 }
 

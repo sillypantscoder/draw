@@ -114,6 +114,16 @@ def post(path: str, body: bytes) -> HttpResponse:
 			"headers": {},
 			"content": b""
 		}
+	elif path == "/erase":
+		id = int(body)
+		for i in [*objects]:
+			if i["id"] == id:
+				objects.remove(i)
+		return {
+			"status": 200,
+			"headers": {},
+			"content": b""
+		}
 	else:
 		return {
 			"status": 404,
