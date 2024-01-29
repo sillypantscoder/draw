@@ -39,6 +39,17 @@ function repr(o) {
 	r += "}"
 	return r
 }
+/** @param {number[]} o */
+function avg(o) {
+	return o.reduce((a, b) => a + b, 0) / o.length
+}
+/**
+ * @param {{ x: number, y: number }} point1
+ * @param {{ x: number, y: number }} point2
+ */
+function dist(point1, point2) {
+	return Math.sqrt(Math.pow(point1.x - point2.x, 2) + Math.pow(point1.y - point2.y, 2))
+}
 
 var theSVG = document.createElementNS("http://www.w3.org/2000/svg", "svg")
 document.querySelector(".mainContainer")?.appendChild(theSVG)
@@ -268,8 +279,8 @@ async function getMessagesLoop() {
 }
 post("/connect", clientID.toString()).then(() => getMessagesLoop())
 
-/** @type {{ x: number, y: number }} */
-var viewPos = { x: 0, y: 0 }
+/** @type {{ x: number, y: number, zoom: number }} */
+var viewPos = { x: 0, y: 0, zoom: 1 }
 
 /** @returns {"Draw" | "Move" | "Erase"} */
 function getCurrentMode() {
@@ -277,7 +288,20 @@ function getCurrentMode() {
 	return document.querySelector(".menu-option-selected").dataset.mode
 }
 function updateViewPos() {
-	theSVG.setAttribute("style", `position: absolute; top: ${viewPos.y}px; left: ${viewPos.x}px;`)
+	theSVG.setAttribute("style", `position: absolute; top: ${viewPos.y}px; left: ${viewPos.x}px; transform: scale(${viewPos.zoom}); transform-origin: top left;`)
+}
+
+/**
+ * @param {{ x: number, y: number }} origin
+ * @param {number} amount
+ */
+function zoomView(origin, amount) {
+	// viewPos.x *= ((amount * origin.x) / -viewPos.x) + amount + (origin.x / viewPos.x)
+	// viewPos.y *= ((amount * origin.y) / -viewPos.y) + amount + (origin.y / viewPos.y)
+	viewPos.x += ((viewPos.x - origin.x) * amount) + (origin.x - viewPos.x)
+	viewPos.y += ((viewPos.y - origin.y) * amount) + (origin.y - viewPos.y)
+	viewPos.zoom *= amount
+	// log(repr(viewPos))
 }
 
 /** @param {{ x: number, y: number }} pos */
@@ -304,7 +328,7 @@ class TrackedTouch {
 		touches.push(this)
 	}
 	getRealPos() {
-		var realPos = { x: this.x - viewPos.x, y: this.y - viewPos.y }
+		var realPos = { x: (this.x - viewPos.x) / viewPos.zoom, y: (this.y - viewPos.y) / viewPos.zoom }
 		return realPos
 	}
 	/**
@@ -433,12 +457,25 @@ class PanTouchMode extends TouchMode {
 	 * @param {number} newY
 	 */
 	onMove(previousX, previousY, newX, newY) {
-		var rel = {
-			x: newX - previousX,
-			y: newY - previousY
+		var previousPos = {
+			x: avg(touches.map((v) => v.x)),
+			y: avg(touches.map((v) => v.y))
 		}
-		viewPos.x += rel.x / touches.length
-		viewPos.y += rel.y / touches.length
+		var previousZoom = avg(touches.map((v) => dist(v, previousPos)))
+		var target = this.touch
+		var newPos = {
+			x: avg(touches.map((v) => (v == target ? newX : v.x))),
+			y: avg(touches.map((v) => (v == target ? newY : v.y)))
+		}
+		var newZoom = avg(touches.map((v) => dist(v == target ? {x:newX,y:newY} : v, newPos)))
+		var zoom = newZoom / previousZoom
+		if (previousZoom == 0 || newZoom == 0) zoom = 1
+		viewPos.x += newPos.x - previousPos.x
+		viewPos.y += newPos.y - previousPos.y
+		zoomView(newPos, zoom)
+		// Update
+		// log(`${Math.round(previousZoom / 10)} ${"#".repeat(previousZoom / 10)} ${"#".repeat(newZoom / 10)} ${Math.round(newZoom / 10)}`)
+		// log(repr(viewPos.zoom))
 		updateViewPos()
 	}
 }
