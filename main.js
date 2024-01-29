@@ -269,13 +269,9 @@ async function getMessagesLoop() {
 post("/connect", clientID.toString()).then(() => getMessagesLoop())
 
 /** @type {{ x: number, y: number }} */
-var viewPos = {x: 0, y: 0}
+var viewPos = { x: 0, y: 0 }
 
-/** @type {{ d: { x: number, y: number }[], elm: SVGPathElement } | null} */
-var currentPath = null
-/** @type {{ x: number, y: number } | null} */
-var currentDrag = null
-
+/** @returns {"Draw" | "Move" | "Erase"} */
 function getCurrentMode() {
 	// @ts-ignore
 	return document.querySelector(".menu-option-selected").dataset.mode
@@ -294,121 +290,236 @@ function erase(pos) {
 	}
 }
 
-/**
- * @param {{ x: number, y: number }} pos
- */
-function mousedown(pos) {
-	var realPos = { x: pos.x - viewPos.x, y: pos.y - viewPos.y }
-	if (getCurrentMode() == "Draw") {
-		currentPath = {
-			d: [realPos],
-			elm: document.createElementNS("http://www.w3.org/2000/svg", "path")
+class TrackedTouch {
+	/**
+	 * @param {number} initialX
+	 * @param {number} initialY
+	 * @param {number} id
+	 */
+	constructor(initialX, initialY, id) {
+		this.x = initialX
+		this.y = initialY
+		this.id = id
+		this.mode = this.getMode()
+		touches.push(this)
+	}
+	getRealPos() {
+		var realPos = { x: this.x - viewPos.x, y: this.y - viewPos.y }
+		return realPos
+	}
+	/**
+	 * @param {number} newX
+	 * @param {number} newY
+	 */
+	updatePos(newX, newY) {
+		this.mode.onMove(this.x, this.y, newX, newY)
+		this.x = newX
+		this.y = newY
+	}
+	remove() {
+		this.mode.onEnd(this.x, this.y)
+		touches.splice(touches.indexOf(this), 1)
+	}
+	/** @returns {TouchMode} */
+	getMode() {
+		// First of all, if there is another touch, we are definitely zooming or panning or something.
+		if (touches.length >= 1) {
+			return new PanTouchMode(this)
 		}
-		currentPath.elm.setAttribute("fill", "none")
-		currentPath.elm.setAttribute("stroke", "red")
-		currentPath.elm.setAttribute("stroke-width", "5")
-		theSVG.appendChild(currentPath.elm)
-	}
-	if (getCurrentMode() == "Move") {
-		currentDrag = pos
-	}
-	if (getCurrentMode() == "Erase") {
-		currentDrag = pos
-		erase(realPos)
+		// Then, find the selected mode in the toolbar.
+		var mode = getCurrentMode()
+		if (mode == "Draw") return new DrawTouchMode(this)
+		if (mode == "Move") return new PanTouchMode(this)
+		if (mode == "Erase") return new EraseTouchMode(this)
+		// Uhhhh.....
+		return new PanTouchMode(this)
 	}
 }
-
-/**
- * @param {{ x: number, y: number }} pos
- */
-function mousemove(pos) {
-	var realPos = { x: pos.x - viewPos.x, y: pos.y - viewPos.y }
-	if (currentPath) {
-		currentPath.d.push(realPos)
-		currentPath.elm.setAttribute("d", pointsToPath(currentPath.d))
+class TouchMode {
+	/**
+	 * @param {TrackedTouch} touch
+	 */
+	constructor(touch) {
+		this.touch = touch
 	}
-	if (currentDrag) {
-		if (getCurrentMode() == "Erase") {
-			erase(realPos)
-		} else {
-			var rel = {
-				x: pos.x - currentDrag.x,
-				y: pos.y - currentDrag.y
-			}
-			viewPos.x += rel.x
-			viewPos.y += rel.y
-			updateViewPos()
-			currentDrag = pos
-		}
-	}
+	/**
+	 * @param {number} previousX
+	 * @param {number} previousY
+	 * @param {number} newX
+	 * @param {number} newY
+	 */
+	onMove(previousX, previousY, newX, newY) {}
+	/**
+	 * @param {number} previousX
+	 * @param {number} previousY
+	 */
+	onEnd(previousX, previousY) {}
 }
-
-/**
- * @param {{ x: number, y: number } | null} pos
- */
-function mouseup(pos) {
-	if (currentPath) {
-		// Final position
-		if (pos) mousemove(pos)
+class DrawTouchMode extends TouchMode {
+	/**
+	 * @param {TrackedTouch} touch
+	 */
+	constructor(touch) {
+		super(touch)
+		/** @type {{ x: number, y: number }[]} */
+		this.points = [touch.getRealPos()]
+		/** @type {SVGPathElement} */
+		this.elm = document.createElementNS("http://www.w3.org/2000/svg", "path")
+		this.elm.setAttribute("fill", "none")
+		this.elm.setAttribute("stroke", "red")
+		this.elm.setAttribute("stroke-width", "5")
+		theSVG.appendChild(this.elm)
+	}
+	/**
+	 * @param {number} previousX
+	 * @param {number} previousY
+	 * @param {number} newX
+	 * @param {number} newY
+	 */
+	onMove(previousX, previousY, newX, newY) {
+		this.points.push(this.touch.getRealPos())
+		this.elm.setAttribute("d", pointsToPath(this.points))
+	}
+	/**
+	 * @param {number} previousX
+	 * @param {number} previousY
+	 */
+	onEnd(previousX, previousY) {
 		// Remove current display elm
-		currentPath.elm.remove()
+		this.elm.remove()
 		// Add drawing to screen
-		if (currentPath.d.length > 6) {
+		if (this.points.length > 6) {
 			SceneObject.createAndSendFromData({
 				"type": "drawing",
-				"d": currentPath.d
+				"d": this.points
 			})
 		}
-		// Reset
-		currentPath = null
 	}
-	if (currentDrag) {
-		currentDrag = null
+}
+class PanTouchMode extends TouchMode {
+	/**
+	 * @param {TrackedTouch} touch
+	 */
+	constructor(touch) {
+		super(touch)
+	}
+	/**
+	 * @param {number} previousX
+	 * @param {number} previousY
+	 * @param {number} newX
+	 * @param {number} newY
+	 */
+	onMove(previousX, previousY, newX, newY) {
+		var rel = {
+			x: newX - previousX,
+			y: newY - previousY
+		}
+		viewPos.x += rel.x
+		viewPos.y += rel.y
+		updateViewPos()
+	}
+}
+class EraseTouchMode extends TouchMode {
+	/**
+	 * @param {TrackedTouch} touch
+	 */
+	constructor(touch) {
+		super(touch)
+		erase(touch.getRealPos())
+	}
+	/**
+	 * @param {number} previousX
+	 * @param {number} previousY
+	 * @param {number} newX
+	 * @param {number} newY
+	 */
+	onMove(previousX, previousY, newX, newY) {
+		erase(this.touch.getRealPos())
+	}
+}
+/**
+ * @type {TrackedTouch[]}
+ */
+var touches = []
+
+/**
+ * @param {number} id
+ * @param {{ x: number; y: number; }} pos
+ */
+function mousemove(id, pos) {
+	for (var i = 0; i < touches.length; i++) {
+		if (touches[i].id == id) {
+			touches[i].updatePos(pos.x, pos.y)
+		}
+	}
+}
+/**
+ * @param {number} id
+ */
+function mouseup(id) {
+	for (var i = 0; i < touches.length; i++) {
+		if (touches[i].id == id) {
+			touches[i].remove()
+		}
+	}
+}
+/** @param {TouchList} touchList */
+function handleTouches(touchList) {
+	// Check for new or updated touches
+	for (var i = 0; i < touchList.length; i++) {
+		// See if we already have this touch
+		var touchID = touchList[i].identifier
+		var idx = touches.findIndex((v) => v.id == touchID)
+		if (idx == -1) {
+			// New touch!
+			new TrackedTouch(touchList[i].clientX, touchList[i].clientY, touchID)
+		} else {
+			// Update existing touch!
+			touches[idx].updatePos(touchList[i].clientX, touchList[i].clientY)
+		}
+	}
+	// Check for old touches
+	var _t = [...touches]
+	for (var i = 0; i < _t.length; i++) {
+		var touchID = _t[i].id
+		var idx = [...touchList].findIndex((v) => v.identifier == touchID)
+		if (idx == -1) {
+			// Old touch!
+			_t[i].remove()
+		}
 	}
 }
 
 theSVG.parentElement?.addEventListener("mousedown", (e) => {
-	mousedown({
-		x: e.clientX,
-		y: e.clientY
-	});
+	new TrackedTouch(e.clientX, e.clientY, 0);
 });
 theSVG.parentElement?.addEventListener("mousemove", (e) => {
-	mousemove({
+	mousemove(0, {
 		x: e.clientX,
 		y: e.clientY
 	});
 });
 theSVG.parentElement?.addEventListener("mouseup", (e) => {
-	mouseup({
-		x: e.clientX,
-		y: e.clientY
-	});
+	mouseup(0);
 });
 
 theSVG.parentElement?.addEventListener("touchstart", (e) => {
 	e.preventDefault();
-	mousedown({
-		x: e.touches[0].clientX,
-		y: e.touches[0].clientY
-	});
+	handleTouches(e.touches)
 	return false
 }, false);
 theSVG.parentElement?.addEventListener("touchmove", (e) => {
 	e.preventDefault();
-	mousemove({
-		x: e.touches[0].clientX,
-		y: e.touches[0].clientY
-	});
+	handleTouches(e.touches)
 	return false
 }, false);
 theSVG.parentElement?.addEventListener("touchcancel", (e) => {
 	e.preventDefault();
-	mouseup(null);
+	handleTouches(e.touches)
 	return false
 }, false);
 theSVG.parentElement?.addEventListener("touchend", (e) => {
 	e.preventDefault();
-	mouseup(null);
+	handleTouches(e.touches)
 	return false
 }, false);
