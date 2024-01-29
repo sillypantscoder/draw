@@ -320,10 +320,21 @@ class TrackedTouch {
 		this.mode.onEnd(this.x, this.y)
 		touches.splice(touches.indexOf(this), 1)
 	}
+	cancel() {
+		this.mode.onCancel(this.x, this.y)
+		touches.splice(touches.indexOf(this), 1)
+	}
 	/** @returns {TouchMode} */
 	getMode() {
 		// First of all, if there is another touch, we are definitely zooming or panning or something.
 		if (touches.length >= 1) {
+			// Also, so are all the other touches.
+			var _t = [...touches]
+			for (var i = 0; i < _t.length; i++) {
+				_t[i].cancel()
+				_t[i].mode = new PanTouchMode(_t[i])
+				touches.push(_t[i])
+			}
 			return new PanTouchMode(this)
 		}
 		// Then, find the selected mode in the toolbar.
@@ -354,6 +365,11 @@ class TouchMode {
 	 * @param {number} previousY
 	 */
 	onEnd(previousX, previousY) {}
+	/**
+	 * @param {number} previousX
+	 * @param {number} previousY
+	 */
+	onCancel(previousX, previousY) {}
 }
 class DrawTouchMode extends TouchMode {
 	/**
@@ -395,6 +411,13 @@ class DrawTouchMode extends TouchMode {
 			})
 		}
 	}
+	/**
+	 * @param {number} previousX
+	 * @param {number} previousY
+	 */
+	onCancel(previousX, previousY) {
+		this.elm.remove()
+	}
 }
 class PanTouchMode extends TouchMode {
 	/**
@@ -414,8 +437,8 @@ class PanTouchMode extends TouchMode {
 			x: newX - previousX,
 			y: newY - previousY
 		}
-		viewPos.x += rel.x
-		viewPos.y += rel.y
+		viewPos.x += rel.x / touches.length
+		viewPos.y += rel.y / touches.length
 		updateViewPos()
 	}
 }
