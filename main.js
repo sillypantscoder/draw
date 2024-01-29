@@ -369,6 +369,9 @@ class TrackedTouch {
 		// Uhhhh.....
 		return new PanTouchMode(this)
 	}
+	toString() {
+		return `TrackedTouch { x: ${this.x}; y: ${this.y}; mode: ${this.mode.toString()} }`
+	}
 }
 class TouchMode {
 	/**
@@ -394,6 +397,9 @@ class TouchMode {
 	 * @param {number} previousY
 	 */
 	onCancel(previousX, previousY) {}
+	toString() {
+		return `TouchMode { broken }`
+	}
 }
 class DrawTouchMode extends TouchMode {
 	/**
@@ -442,6 +448,9 @@ class DrawTouchMode extends TouchMode {
 	onCancel(previousX, previousY) {
 		this.elm.remove()
 	}
+	toString() {
+		return `DrawTouchMode { ${this.points.length} points }`
+	}
 }
 class PanTouchMode extends TouchMode {
 	/**
@@ -478,6 +487,9 @@ class PanTouchMode extends TouchMode {
 		// log(repr(viewPos.zoom))
 		updateViewPos()
 	}
+	toString() {
+		return `PanTouchMode {}`
+	}
 }
 class EraseTouchMode extends TouchMode {
 	/**
@@ -495,6 +507,9 @@ class EraseTouchMode extends TouchMode {
 	 */
 	onMove(previousX, previousY, newX, newY) {
 		erase(this.touch.getRealPos())
+	}
+	toString() {
+		return `EraseTouchMode {}`
 	}
 }
 /**
@@ -548,6 +563,7 @@ function handleTouches(touchList) {
 			_t[i].remove()
 		}
 	}
+	// log(repr(touches.map((v) => v.toString())))
 }
 
 theSVG.parentElement?.addEventListener("mousedown", (e) => {
