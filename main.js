@@ -117,6 +117,9 @@ class SceneObject {
 	verify() {}
 	remove() {
 		objects.splice(objects.indexOf(this), 1)
+	}
+	removeAndSendErase() {
+		this.remove()
 		SceneObject.sendErase(this.id)
 	}
 	/**
@@ -231,14 +234,29 @@ function importObject(id, data) {
 	var o = SceneObject.createFromDataAndID(data, id)
 	o.verify()
 }
+/**
+ * @param {number} id
+ */
+function importErase(id) {
+	for (var i = 0; i < objects.length; i++) {
+		if (objects[i].id == id) {
+			// erase this
+			objects[i].remove()
+			return
+		}
+	}
+}
 async function getMessages() {
 	var data = await get("/messages/" + clientID)
-	/** @type {({ type: "create_object", id: number, data: Object.<string, any> })[]} */
+	/** @type {({ type: "create_object", id: number, data: Object.<string, any> } | { "type": "erase", id: number })[]} */
 	var messages = JSON.parse(data)
 	for (var i = 0; i < messages.length; i++) {
 		var msg = messages[i]
 		if (msg.type == "create_object") {
 			importObject(msg.id, msg.data)
+		}
+		if (msg.type == "erase") {
+			importErase(msg.id)
 		}
 	}
 }
@@ -271,7 +289,7 @@ function erase(pos) {
 	var o = [...objects]
 	for (var i = 0; i < o.length; i++) {
 		if (o[i].collidepoint(pos)) {
-			o[i].remove()
+			o[i].removeAndSendErase()
 		}
 	}
 }

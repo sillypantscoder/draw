@@ -119,6 +119,11 @@ def post(path: str, body: bytes) -> HttpResponse:
 		for i in [*objects]:
 			if i["id"] == id:
 				objects.remove(i)
+				for i in range(len(clients)):
+					clients[i]["messages"].append({
+						"type": "erase",
+						"id": id
+					})
 		return {
 			"status": 200,
 			"headers": {},
