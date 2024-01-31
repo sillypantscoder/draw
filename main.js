@@ -75,11 +75,12 @@ document.querySelector(".menu")?.addEventListener("click", (event) => {
  * @returns {Promise<string>}
  */
 function get(path) {
-	return new Promise((resolve) => {
+	return new Promise((resolve, reject) => {
 		var x = new XMLHttpRequest()
 		x.open("GET", path)
 		x.addEventListener("loadend", () => {
-			resolve(x.responseText)
+			if (x.status == 200) resolve(x.responseText)
+			else reject(x.status)
 		})
 		x.send()
 	})
@@ -258,7 +259,12 @@ function importErase(id) {
 	}
 }
 async function getMessages() {
-	var data = await get("/messages/" + clientID)
+	try {
+		var data = await get("/messages/" + clientID)
+	} catch (e) {
+		alert("Lost connection with the server!")
+		throw e
+	}
 	/** @type {({ type: "create_object", id: number, data: Object.<string, any> } | { "type": "erase", id: number })[]} */
 	var messages = JSON.parse(data)
 	for (var i = 0; i < messages.length; i++) {
@@ -577,6 +583,13 @@ theSVG.parentElement?.addEventListener("mousemove", (e) => {
 });
 theSVG.parentElement?.addEventListener("mouseup", (e) => {
 	mouseup(0);
+});
+theSVG.parentElement?.addEventListener("wheel", (e) => {
+	zoomView({
+		x: e.clientX,
+		y: e.clientY
+	}, Math.pow(2, e.deltaY / -500));
+	updateViewPos();
 });
 
 theSVG.parentElement?.addEventListener("touchstart", (e) => {

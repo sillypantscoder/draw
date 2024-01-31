@@ -2,6 +2,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import typing
 import json
 import datetime
+import os
 
 hostName = "0.0.0.0"
 serverPort = 8059
@@ -22,16 +23,32 @@ class HttpResponse(typing.TypedDict):
 	headers: dict[str, str]
 	content: bytes
 
+class SceneObject(typing.TypedDict):
+	id: int
+	data: dict[str, typing.Any]
+
 class Client(typing.TypedDict):
 	id: int
 	lastTime: datetime.datetime
 	messages: list[dict[str, typing.Any]]
 
-objects: list[dict[str, int | dict[str, str]]] = []
+objects: list[SceneObject] = []
 clients: list[Client] = []
 
 def purgeClientList():
 	pass # TODO
+
+def saveObjectList():
+	f = open("objects.json", "w")
+	f.write(json.dumps(objects))
+	f.close()
+
+def loadObjectList():
+	global objects
+	if not os.path.isfile("objects.json"): return
+	f = open("objects.json", "r")
+	objects = json.loads(f.read())
+	f.close()
 
 def get(path: str) -> HttpResponse:
 	if path == "/":
@@ -109,6 +126,7 @@ def post(path: str, body: bytes) -> HttpResponse:
 				"id": bodydata["id"],
 				"data": bodydata["data"]
 			})
+		saveObjectList()
 		return {
 			"status": 200,
 			"headers": {},
@@ -124,6 +142,7 @@ def post(path: str, body: bytes) -> HttpResponse:
 						"type": "erase",
 						"id": id
 					})
+		saveObjectList()
 		return {
 			"status": 200,
 			"headers": {},
@@ -162,6 +181,7 @@ class MyServer(BaseHTTPRequestHandler):
 		# don't output requests
 
 if __name__ == "__main__":
+	loadObjectList()
 	running = True
 	webServer = HTTPServer((hostName, serverPort), MyServer)
 	webServer.timeout = 1
