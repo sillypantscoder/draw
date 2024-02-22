@@ -127,6 +127,7 @@ class SceneObject {
 		objects.push(this)
 	}
 	verify() {}
+	update() {}
 	remove() {
 		objects.splice(objects.indexOf(this), 1)
 	}
@@ -191,11 +192,11 @@ class DrawingObject extends SceneObject {
 		/** @type {{ x: number, y: number }[]} */
 		this.path = data.d
 		this.elm = document.createElementNS("http://www.w3.org/2000/svg", "path")
-		this.elm.setAttribute("d", pointsToPath(this.path))
 		this.elm.setAttribute("fill", "none")
 		this.elm.setAttribute("stroke", "black")
 		this.elm.setAttribute("stroke-width", "5")
 		this.elm.setAttribute("opacity", "0.5")
+		this.update()
 	}
 	add() {
 		super.add()
@@ -203,6 +204,10 @@ class DrawingObject extends SceneObject {
 	}
 	verify() {
 		this.elm.removeAttribute("opacity")
+	}
+	update() {
+		this.elm.setAttribute("d", pointsToPath(this.path.map((v) => getScreenPosFromStagePos(v.x, v.y))))
+		this.elm.setAttribute("stroke-width", (5 * viewPos.zoom).toString())
 	}
 	remove() {
 		super.remove()
@@ -293,8 +298,30 @@ function getCurrentMode() {
 	// @ts-ignore
 	return document.querySelector(".menu-option-selected").dataset.mode
 }
+// function updateViewPos() {
+// 	theSVG.setAttribute("style", `position: absolute; top: ${viewPos.y}px; left: ${viewPos.x}px; transform: scale(${viewPos.zoom}); transform-origin: top left;`)
+// 	// log(theSVG.getAttribute("style"))
+// }
 function updateViewPos() {
-	theSVG.setAttribute("style", `position: absolute; top: ${viewPos.y}px; left: ${viewPos.x}px; transform: scale(${viewPos.zoom}); transform-origin: top left;`)
+	for (var i = 0; i < objects.length; i++) {
+		objects[i].update()
+	}
+}
+/**
+ * @param {number} x
+ * @param {number} y
+ */
+function getStagePosFromScreenPos(x, y) {
+	var realPos = { x: (x - viewPos.x) / viewPos.zoom, y: (y - viewPos.y) / viewPos.zoom }
+	return realPos
+}
+/**
+ * @param {number} x
+ * @param {number} y
+ */
+function getScreenPosFromStagePos(x, y) {
+	var realPos = { x: (x * viewPos.zoom) + viewPos.x, y: (y * viewPos.zoom) + viewPos.y }
+	return realPos
 }
 
 /**
@@ -332,10 +359,6 @@ class TrackedTouch {
 		this.id = id
 		this.mode = this.getMode()
 		touches.push(this)
-	}
-	getRealPos() {
-		var realPos = { x: (this.x - viewPos.x) / viewPos.zoom, y: (this.y - viewPos.y) / viewPos.zoom }
-		return realPos
 	}
 	/**
 	 * @param {number} newX
@@ -414,7 +437,7 @@ class DrawTouchMode extends TouchMode {
 	constructor(touch) {
 		super(touch)
 		/** @type {{ x: number, y: number }[]} */
-		this.points = [touch.getRealPos()]
+		this.points = [getStagePosFromScreenPos(touch.x, touch.y)]
 		/** @type {SVGPathElement} */
 		this.elm = document.createElementNS("http://www.w3.org/2000/svg", "path")
 		this.elm.setAttribute("fill", "none")
@@ -429,8 +452,9 @@ class DrawTouchMode extends TouchMode {
 	 * @param {number} newY
 	 */
 	onMove(previousX, previousY, newX, newY) {
-		this.points.push(this.touch.getRealPos())
-		this.elm.setAttribute("d", pointsToPath(this.points))
+		this.points.push(getStagePosFromScreenPos(this.touch.x, this.touch.y))
+		this.elm.setAttribute("d", pointsToPath(this.points.map((v) => getScreenPosFromStagePos(v.x, v.y))))
+		this.elm.setAttribute("stroke-width", (5 * viewPos.zoom).toString())
 	}
 	/**
 	 * @param {number} previousX
@@ -503,7 +527,7 @@ class EraseTouchMode extends TouchMode {
 	 */
 	constructor(touch) {
 		super(touch)
-		erase(touch.getRealPos())
+		erase(getStagePosFromScreenPos(touch.x, touch.y))
 	}
 	/**
 	 * @param {number} previousX
@@ -512,7 +536,7 @@ class EraseTouchMode extends TouchMode {
 	 * @param {number} newY
 	 */
 	onMove(previousX, previousY, newX, newY) {
-		erase(this.touch.getRealPos())
+		erase(getStagePosFromScreenPos(this.touch.x, this.touch.y))
 	}
 	toString() {
 		return `EraseTouchMode {}`
