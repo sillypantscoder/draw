@@ -67,6 +67,14 @@ def get(path: str) -> HttpResponse:
 			},
 			"content": read_file("main.js")
 		}
+	elif path == "/cp2l.js":
+		return {
+			"status": 200,
+			"headers": {
+				"Content-Type": "text/javascript"
+			},
+			"content": read_file("cp2l.js")
+		}
 	elif path.startswith("/messages/"):
 		id = int(path[10:])
 		ci = -1

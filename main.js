@@ -50,6 +50,7 @@ function avg(o) {
 function dist(point1, point2) {
 	return Math.sqrt(Math.pow(point1.x - point2.x, 2) + Math.pow(point1.y - point2.y, 2))
 }
+const isPointNearLine = getDistanceFromLineToPointFunction()
 
 var theSVG = document.createElementNS("http://www.w3.org/2000/svg", "svg")
 document.querySelector(".mainContainer")?.appendChild(theSVG)
@@ -215,11 +216,8 @@ class DrawingObject extends SceneObject {
 	}
 	/** @param {{ x: number, y: number }} pos */
 	collidepoint(pos) {
-		for (var i = 0; i < this.path.length; i += 3) {
-			var p = this.path[i]
-			var xi = Math.abs(p.x - pos.x)
-			var yi = Math.abs(p.y - pos.y)
-			if (xi < 10 && yi < 10) {
+		for (var i = 0; i < this.path.length - 1; i++) {
+			if (isPointNearLine(pos, this.path[i], this.path[i + 1]) < 3 / viewPos.zoom) {
 				return true
 			}
 		}
@@ -597,6 +595,7 @@ function handleTouches(touchList) {
 }
 
 theSVG.parentElement?.addEventListener("mousedown", (e) => {
+	mouseup(0)
 	new TrackedTouch(e.clientX, e.clientY, 0);
 });
 theSVG.parentElement?.addEventListener("mousemove", (e) => {
