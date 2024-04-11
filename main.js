@@ -192,9 +192,10 @@ class DrawingObject extends SceneObject {
 		super(id, data)
 		/** @type {{ x: number, y: number }[]} */
 		this.path = data.d
+		this.color = data.color
 		this.elm = document.createElementNS("http://www.w3.org/2000/svg", "path")
 		this.elm.setAttribute("fill", "none")
-		this.elm.setAttribute("stroke", "black")
+		this.elm.setAttribute("stroke", this.color)
 		this.elm.setAttribute("stroke-width", "5")
 		this.elm.setAttribute("opacity", "0.5")
 		this.update()
@@ -209,6 +210,7 @@ class DrawingObject extends SceneObject {
 	update() {
 		this.elm.setAttribute("d", pointsToPath(this.path.map((v) => getScreenPosFromStagePos(v.x, v.y))))
 		this.elm.setAttribute("stroke-width", (5 * viewPos.zoom).toString())
+		this.elm.setAttribute("stroke", this.color)
 	}
 	remove() {
 		super.remove()
@@ -390,7 +392,7 @@ class TrackedTouch {
 		}
 		// Then, find the selected mode in the toolbar.
 		var mode = getCurrentMode()
-		if (mode == "Draw") return new DrawTouchMode(this)
+		if (mode == "Draw") return new DrawTouchMode(this, document.querySelector("#draw-color").value)
 		if (mode == "Move") return new PanTouchMode(this)
 		if (mode == "Erase") return new EraseTouchMode(this)
 		// Uhhhh.....
@@ -431,8 +433,9 @@ class TouchMode {
 class DrawTouchMode extends TouchMode {
 	/**
 	 * @param {TrackedTouch} touch
+	 * @param {string} color
 	 */
-	constructor(touch) {
+	constructor(touch, color) {
 		super(touch)
 		/** @type {{ x: number, y: number }[]} */
 		this.points = [getStagePosFromScreenPos(touch.x, touch.y)]
@@ -442,6 +445,7 @@ class DrawTouchMode extends TouchMode {
 		this.elm.setAttribute("stroke", "red")
 		this.elm.setAttribute("stroke-width", "5")
 		theSVG.appendChild(this.elm)
+		this.color = color
 	}
 	/**
 	 * @param {number} previousX
@@ -465,7 +469,8 @@ class DrawTouchMode extends TouchMode {
 		if (this.points.length > 6) {
 			SceneObject.createAndSendFromData({
 				"type": "drawing",
-				"d": this.points
+				"d": this.points,
+				"color": this.color
 			})
 		}
 	}

@@ -5,7 +5,7 @@ import datetime
 import os
 
 hostName = "0.0.0.0"
-serverPort = 8059
+serverPort = 8060
 
 def read_file(filename: str) -> bytes:
 	f = open(filename, "rb")
@@ -49,6 +49,7 @@ def loadObjectList():
 	f = open("objects.json", "r")
 	objects = json.loads(f.read())
 	f.close()
+	print("loaded", len(objects), "objects")
 
 def get(path: str) -> HttpResponse:
 	if path == "/":
