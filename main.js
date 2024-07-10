@@ -209,7 +209,7 @@ class DrawingObject extends SceneObject {
 	}
 	update() {
 		this.elm.setAttribute("d", pointsToPath(this.path.map((v) => getScreenPosFromStagePos(v.x, v.y))))
-		this.elm.setAttribute("stroke-width", (5 * viewPos.zoom).toString())
+		// this.elm.setAttribute("stroke-width", (5 * viewPos.zoom).toString())
 		this.elm.setAttribute("stroke", this.color)
 	}
 	remove() {
@@ -353,10 +353,11 @@ class TrackedTouch {
 	 * @param {number} initialY
 	 * @param {number} id
 	 */
-	constructor(initialX, initialY, id) {
+	constructor(initialX, initialY, id, isEraserButton) {
 		this.x = initialX
 		this.y = initialY
 		this.id = id
+		this.isEraserButton = isEraserButton
 		this.mode = this.getMode()
 		touches.push(this)
 	}
@@ -379,6 +380,7 @@ class TrackedTouch {
 	}
 	/** @returns {TouchMode} */
 	getMode() {
+		if (this.isEraserButton) return new EraseTouchMode(this)
 		// First of all, if there is another touch, we are definitely zooming or panning or something.
 		if (touches.length >= 1) {
 			// Also, so are all the other touches.
@@ -456,7 +458,7 @@ class DrawTouchMode extends TouchMode {
 	onMove(previousX, previousY, newX, newY) {
 		this.points.push(getStagePosFromScreenPos(this.touch.x, this.touch.y))
 		this.elm.setAttribute("d", pointsToPath(this.points.map((v) => getScreenPosFromStagePos(v.x, v.y))))
-		this.elm.setAttribute("stroke-width", (5 * viewPos.zoom).toString())
+		// this.elm.setAttribute("stroke-width", (5 * viewPos.zoom).toString())
 	}
 	/**
 	 * @param {number} previousX
@@ -571,6 +573,16 @@ function mouseup(id) {
 		}
 	}
 }
+/**
+ * @param {number} id
+ */
+function mousecancel(id) {
+	for (var i = 0; i < touches.length; i++) {
+		if (touches[i].id == id) {
+			touches[i].cancel()
+		}
+	}
+}
 /** @param {TouchList} touchList */
 function handleTouches(touchList) {
 	// Check for new or updated touches
@@ -580,7 +592,7 @@ function handleTouches(touchList) {
 		var idx = touches.findIndex((v) => v.id == touchID)
 		if (idx == -1) {
 			// New touch!
-			new TrackedTouch(touchList[i].clientX, touchList[i].clientY, touchID)
+			new TrackedTouch(touchList[i].clientX, touchList[i].clientY, touchID, false)
 		} else {
 			// Update existing touch!
 			touches[idx].updatePos(touchList[i].clientX, touchList[i].clientY)
@@ -600,8 +612,13 @@ function handleTouches(touchList) {
 }
 
 theSVG.parentElement?.addEventListener("mousedown", (e) => {
-	mouseup(0)
-	new TrackedTouch(e.clientX, e.clientY, 0);
+	if (e.buttons == 4 || e.buttons == 5) {
+		mousecancel(0)
+		new TrackedTouch(e.clientX, e.clientY, 0, true);
+	} else {
+		mouseup(0)
+		new TrackedTouch(e.clientX, e.clientY, 0, false);
+	}
 });
 theSVG.parentElement?.addEventListener("mousemove", (e) => {
 	mousemove(0, {
