@@ -69,6 +69,7 @@ document.querySelector(".menu")?.addEventListener("click", (event) => {
 		document.querySelector('.menu-option-selected')?.classList.remove('menu-option-selected');
 		menuoption.classList.add("menu-option-selected")
 	}
+	document.querySelector('#mode-output').innerText = getCurrentMode()
 }, false)
 
 /**
@@ -226,10 +227,72 @@ class DrawingObject extends SceneObject {
 		return false
 	}
 }
+class TextObject extends SceneObject {
+	/**
+	 * @param {number} id
+	 * @param {Object.<string, any>} data
+	 */
+	constructor(id, data) {
+		super(id, data)
+		/** @type {{ x: number, y: number }} */
+		this.pos = data.pos
+		/** @type {string} */
+		this.text = data.text
+		this.elm = document.createElementNS("http://www.w3.org/1999/xhtml", "textarea")
+		this.elm.setAttribute("class", "unverified")
+		var _text = this
+		this.elm.addEventListener("click", (event) => {
+			event.stopPropagation()
+		}, false)
+		this.elm.addEventListener("mousedown", (event) => {
+			if (getCurrentMode() == "Text") {
+				event.stopPropagation()
+			} else {
+				event.preventDefault()
+			}
+		}, false)
+		this.elm.addEventListener("touchstart", (event) => {
+			event.stopPropagation()
+		}, false)
+		this.elm.addEventListener("input", () => {
+			_text.elm.style.width = (Math.max(..._text.elm.value.split("\n").map((v) => v.length)) + 3) + "ch"
+			_text.elm.style.height = "";
+			_text.elm.style.height = "calc(" + _text.elm.scrollHeight + "px + 0.25em)"
+		})
+		this.elm.addEventListener("blur", (event) => {
+			_text.text = _text.elm.value
+			_text.elm.setAttribute("class", "unverified")
+			SceneObject.sendCreateObject(_text.id, { type: "text", text: _text.elm.value, pos: _text.pos })
+		})
+		requestAnimationFrame(() => _text.update())
+	}
+	add() {
+		super.add()
+		document.querySelector(".mainContainer")?.appendChild(this.elm)
+	}
+	verify() {
+		this.elm.removeAttribute("class")
+	}
+	update() {
+		if (document.activeElement != this.elm) this.elm.value = this.text
+		this.elm.setAttribute("style", `top: ${(this.pos.y * viewPos.zoom) + viewPos.y}px; left: ${(this.pos.x * viewPos.zoom) + viewPos.x}px; transform: scale(${viewPos.zoom}); transform-origin: 0px 0px;`)
+		this.elm.dispatchEvent(new KeyboardEvent("input"))
+	}
+	remove() {
+		super.remove()
+		this.elm.remove()
+	}
+	/** @param {{ x: number, y: number }} pos */
+	collidepoint(pos) {
+		var screenPos = getScreenPosFromStagePos(pos.x, pos.y)
+		return document.elementsFromPoint(screenPos.x, screenPos.y).includes(this.elm)
+	}
+}
 
 /** @type {Object.<string, typeof SceneObject>} */
 var objectTypes = {
-	"drawing": DrawingObject
+	"drawing": DrawingObject,
+	"text": TextObject
 }
 
 /** @type {SceneObject[]} */
@@ -243,8 +306,7 @@ function importObject(id, data) {
 	for (var i = 0; i < objects.length; i++) {
 		if (objects[i].id == id) {
 			// re-send
-			objects[i].verify()
-			return
+			objects[i].remove()
 		}
 	}
 	// create the object
@@ -293,7 +355,7 @@ post("/connect", clientID.toString()).then(() => getMessagesLoop())
 /** @type {{ x: number, y: number, zoom: number }} */
 var viewPos = { x: 0, y: 0, zoom: 1 }
 
-/** @returns {"Draw" | "Move" | "Erase"} */
+/** @returns {"Draw" | "Text" | "Move" | "Erase"} */
 function getCurrentMode() {
 	// @ts-ignore
 	return document.querySelector(".menu-option-selected").dataset.mode
@@ -360,6 +422,7 @@ class TrackedTouch {
 		this.isEraserButton = isEraserButton
 		this.mode = this.getMode()
 		touches.push(this)
+		document.activeElement.blur()
 	}
 	/**
 	 * @param {number} newX
@@ -395,6 +458,7 @@ class TrackedTouch {
 		// Then, find the selected mode in the toolbar.
 		var mode = getCurrentMode()
 		if (mode == "Draw") return new DrawTouchMode(this, document.querySelector("#draw-color").value)
+		if (mode == "Text") return new TextTouchMode(this)
 		if (mode == "Move") return new PanTouchMode(this)
 		if (mode == "Erase") return new EraseTouchMode(this)
 		// Uhhhh.....
@@ -487,6 +551,42 @@ class DrawTouchMode extends TouchMode {
 		return `DrawTouchMode { ${this.points.length} points }`
 	}
 }
+class TextTouchMode extends TouchMode {
+	/**
+	 * @param {TrackedTouch} touch
+	 */
+	constructor(touch) {
+		super(touch)
+	}
+	/**
+	 * @param {number} previousX
+	 * @param {number} previousY
+	 * @param {number} newX
+	 * @param {number} newY
+	 */
+	onMove(previousX, previousY, newX, newY) {
+	}
+	/**
+	 * @param {number} previousX
+	 * @param {number} previousY
+	 */
+	onEnd(previousX, previousY) {
+		SceneObject.createAndSendFromData({
+			"type": "text",
+			"text": "Enter text here",
+			"pos": getStagePosFromScreenPos(previousX, previousY)
+		})
+	}
+	/**
+	 * @param {number} previousX
+	 * @param {number} previousY
+	 */
+	onCancel(previousX, previousY) {
+	}
+	toString() {
+		return `TextTouchMode { }`
+	}
+}
 class PanTouchMode extends TouchMode {
 	/**
 	 * @param {TrackedTouch} touch
@@ -518,8 +618,6 @@ class PanTouchMode extends TouchMode {
 		viewPos.y += newPos.y - previousPos.y
 		zoomView(newPos, zoom)
 		// Update
-		// log(`${Math.round(previousZoom / 10)} ${"#".repeat(previousZoom / 10)} ${"#".repeat(newZoom / 10)} ${Math.round(newZoom / 10)}`)
-		// log(repr(viewPos.zoom))
 		updateViewPos()
 	}
 	toString() {
@@ -608,10 +706,10 @@ function handleTouches(touchList) {
 			_t[i].remove()
 		}
 	}
-	// log(repr(touches.map((v) => v.toString())))
 }
 
 theSVG.parentElement?.addEventListener("mousedown", (e) => {
+	if (e.target instanceof HTMLTextAreaElement && getCurrentMode() == "Text") return
 	if (e.buttons == 4 || e.buttons == 5) {
 		mousecancel(0)
 		new TrackedTouch(e.clientX, e.clientY, 0, true);
@@ -638,21 +736,25 @@ theSVG.parentElement?.addEventListener("wheel", (e) => {
 });
 
 theSVG.parentElement?.addEventListener("touchstart", (e) => {
+	if (e.target instanceof HTMLTextAreaElement && getCurrentMode() == "Text") return
 	e.preventDefault();
 	handleTouches(e.touches)
 	return false
 }, false);
 theSVG.parentElement?.addEventListener("touchmove", (e) => {
+	if (e.target instanceof HTMLTextAreaElement && getCurrentMode() == "Text") return
 	e.preventDefault();
 	handleTouches(e.touches)
 	return false
 }, false);
 theSVG.parentElement?.addEventListener("touchcancel", (e) => {
+	if (e.target instanceof HTMLTextAreaElement && getCurrentMode() == "Text") return
 	e.preventDefault();
 	handleTouches(e.touches)
 	return false
 }, false);
 theSVG.parentElement?.addEventListener("touchend", (e) => {
+	if (e.target instanceof HTMLTextAreaElement && getCurrentMode() == "Text") return
 	e.preventDefault();
 	handleTouches(e.touches)
 	return false

@@ -125,10 +125,16 @@ def post(path: str, body: bytes) -> HttpResponse:
 		}
 	elif path == "/create_object":
 		bodydata = json.loads(body)
-		objects.append({
-			"id": bodydata["id"],
-			"data": bodydata["data"]
-		})
+		create = True
+		for o in objects:
+			if o["id"] == bodydata["id"]:
+				o["data"] = bodydata["data"]
+				create = False
+		if create:
+			objects.append({
+				"id": bodydata["id"],
+				"data": bodydata["data"]
+			})
 		for i in range(len(clients)):
 			clients[i]["messages"].append({
 				"type": "create_object",
