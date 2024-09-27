@@ -2,7 +2,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import typing
 import json
 import datetime
-import os
+# import os
 
 hostName = "0.0.0.0"
 serverPort = 8060
@@ -32,24 +32,29 @@ class Client(typing.TypedDict):
 	lastTime: datetime.datetime
 	messages: list[dict[str, typing.Any]]
 
-objects: list[SceneObject] = []
-clients: list[Client] = []
+class Whiteboard:
+	def __init__(self):
+		self.objects: list[SceneObject] = []
+		self.clients: list[Client] = []
+
+whiteboards: dict[str, Whiteboard] = {
+	"thingy": Whiteboard()
+}
 
 def purgeClientList():
 	pass # TODO
 
-def saveObjectList():
-	f = open("objects.json", "w")
-	f.write(json.dumps(objects))
-	f.close()
+# def saveObjectList():
+# 	f = open("objects.json", "w")
+# 	f.write(json.dumps(objects))
+# 	f.close()
 
-def loadObjectList():
-	global objects
-	if not os.path.isfile("objects.json"): return
-	f = open("objects.json", "r")
-	objects = json.loads(f.read())
-	f.close()
-	print("loaded", len(objects), "objects")
+# def loadObjectList():
+# 	if not os.path.isfile("objects.json"): return
+# 	f = open("objects.json", "r")
+# 	objects = json.loads(f.read())
+# 	f.close()
+# 	print("loaded", len(objects), "objects")
 
 def get(path: str) -> HttpResponse:
 	if path == "/":
@@ -76,99 +81,138 @@ def get(path: str) -> HttpResponse:
 			},
 			"content": read_file("cp2l.js")
 		}
-	elif path.startswith("/messages/"):
-		id = int(path[10:])
-		ci = -1
-		for i in range(len(clients)):
-			if clients[i]["id"] == id:
-				ci = i
-		if ci == -1: return {
-			"status": 404,
-			"headers": {},
-			"content": b""
-		}
-		r = json.dumps(clients[ci]["messages"])
-		clients[ci]["messages"] = []
-		clients[ci]["lastTime"] = datetime.datetime.now()
+	elif path.startswith("/whiteboard/"):
+		board_name = path.split("/")[2]
+		if board_name not in whiteboards.keys():
+			return {
+				"status": 404,
+				"headers": {
+					"Content-Type": "text/html"
+				},
+				"content": b"Not Found"
+			}
+		board = whiteboards[board_name]
+		op = path.split("/")[3]
+		if op == "":
+			return {
+				"status": 200,
+				"headers": {
+					"Content-Type": "text/html"
+				},
+				"content": read_file("whiteboard.html")
+			}
+		if op == "messages":
+			clientID = int(path.split("/")[4])
+			ci = -1
+			for i in range(len(board.clients)):
+				if board.clients[i]["id"] == clientID:
+					ci = i
+			if ci == -1: return {
+				"status": 404,
+				"headers": {},
+				"content": b""
+			}
+			r = json.dumps(board.clients[ci]["messages"])
+			board.clients[ci]["messages"] = []
+			board.clients[ci]["lastTime"] = datetime.datetime.now()
+			return {
+				"status": 200,
+				"headers": {
+					"Content-Type": "text/json"
+				},
+				"content": r.encode("UTF-8")
+			}
+	elif path == "/whiteboard.js":
 		return {
 			"status": 200,
 			"headers": {
-				"Content-Type": "text/json"
+				"Content-Type": "text/javascript"
 			},
-			"content": r.encode("UTF-8")
+			"content": read_file("whiteboard.js")
 		}
-	else: # 404 page
-		return {
-			"status": 404,
-			"headers": {},
-			"content": b""
-		}
+	# 404 page
+	return {
+		"status": 404,
+		"headers": {},
+		"content": b""
+	}
 
 def post(path: str, body: bytes) -> HttpResponse:
-	if path == "/connect":
-		id = int(body)
-		clients.append({
-			"id": id,
-			"lastTime": datetime.datetime.now(),
-			"messages": [
-				{
+	if path.startswith("/whiteboard/"):
+		board_name = path.split("/")[2]
+		if board_name not in whiteboards.keys():
+			return {
+				"status": 404,
+				"headers": {
+					"Content-Type": "text/html"
+				},
+				"content": b"Not Found"
+			}
+		board = whiteboards[board_name]
+		op = path.split("/")[3]
+		if op == "connect": # Register new client
+			clientID = int(body)
+			board.clients.append({
+				"id": clientID,
+				"lastTime": datetime.datetime.now(),
+				"messages": [
+					{
+						"type": "create_object",
+						"id": o["id"],
+						"data": o["data"]
+					} for o in board.objects
+				]
+			})
+			return {
+				"status": 200,
+				"headers": {},
+				"content": b""
+			}
+		if op == "create_object":
+			bodydata = json.loads(body)
+			create = True
+			for o in board.objects:
+				if o["id"] == bodydata["id"]:
+					o["data"] = bodydata["data"]
+					create = False
+			if create:
+				board.objects.append({
+					"id": bodydata["id"],
+					"data": bodydata["data"]
+				})
+			for i in range(len(board.clients)):
+				board.clients[i]["messages"].append({
 					"type": "create_object",
-					"id": o["id"],
-					"data": o["data"]
-				} for o in objects
-			]
-		})
-		return {
-			"status": 200,
-			"headers": {},
-			"content": b""
-		}
-	elif path == "/create_object":
-		bodydata = json.loads(body)
-		create = True
-		for o in objects:
-			if o["id"] == bodydata["id"]:
-				o["data"] = bodydata["data"]
-				create = False
-		if create:
-			objects.append({
-				"id": bodydata["id"],
-				"data": bodydata["data"]
-			})
-		for i in range(len(clients)):
-			clients[i]["messages"].append({
-				"type": "create_object",
-				"id": bodydata["id"],
-				"data": bodydata["data"]
-			})
-		saveObjectList()
-		return {
-			"status": 200,
-			"headers": {},
-			"content": b""
-		}
-	elif path == "/erase":
-		id = int(body)
-		for i in [*objects]:
-			if i["id"] == id:
-				objects.remove(i)
-				for i in range(len(clients)):
-					clients[i]["messages"].append({
-						"type": "erase",
-						"id": id
-					})
-		saveObjectList()
-		return {
-			"status": 200,
-			"headers": {},
-			"content": b""
-		}
-	else:
-		return {
-			"status": 404,
-			"headers": {},
-			"content": b""
-		}
+					"id": bodydata["id"],
+					"data": bodydata["data"]
+				})
+			# saveObjectList()
+			return {
+				"status": 200,
+				"headers": {},
+				"content": b""
+			}
+		if op == "erase":
+			id = int(body)
+			for i in [*board.objects]:
+				if i["id"] == id:
+					board.objects.remove(i)
+					for i in range(len(board.clients)):
+						board.clients[i]["messages"].append({
+							"type": "erase",
+							"id": id
+						})
+			# saveObjectList()
+			return {
+				"status": 200,
+				"headers": {},
+				"content": b""
+			}
+	return {
+		"status": 404,
+		"headers": {},
+		"content": b""
+	}
 
 class MyServer(BaseHTTPRequestHandler):
 	def do_GET(self):
@@ -196,7 +240,7 @@ class MyServer(BaseHTTPRequestHandler):
 		# don't output requests
 
 if __name__ == "__main__":
-	loadObjectList()
+	# loadObjectList()
 	running = True
 	webServer = HTTPServer((hostName, serverPort), MyServer)
 	webServer.timeout = 1

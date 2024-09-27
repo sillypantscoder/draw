@@ -69,7 +69,8 @@ document.querySelector(".menu")?.addEventListener("click", (event) => {
 		document.querySelector('.menu-option-selected')?.classList.remove('menu-option-selected');
 		menuoption.classList.add("menu-option-selected")
 	}
-	document.querySelector('#mode-output').innerText = getCurrentMode()
+	var modeOutput = document.querySelector('#mode-output')
+	if (modeOutput != null) modeOutput.textContent = getCurrentMode()
 }, false)
 
 /**
@@ -142,7 +143,7 @@ class SceneObject {
 	 * @param {Object.<string, any>} data
 	 */
 	static sendCreateObject(id, data) {
-		return post("/create_object", JSON.stringify({
+		return post(location.pathname + "create_object", JSON.stringify({
 			"id": id,
 			"data": data
 		}))
@@ -151,7 +152,7 @@ class SceneObject {
 	 * @param {number} id
 	 */
 	static sendErase(id) {
-		return post("/erase", id.toString())
+		return post(location.pathname + "erase", id.toString())
 	}
 	/**
 	 * @param {Object.<string, any>} data
@@ -327,7 +328,7 @@ function importErase(id) {
 }
 async function getMessages() {
 	try {
-		var data = await get("/messages/" + clientID)
+		var data = await get(location.pathname + "messages/" + clientID)
 	} catch (e) {
 		alert("Lost connection with the server!")
 		throw e
@@ -350,7 +351,7 @@ async function getMessagesLoop() {
 		await new Promise((resolve) => setTimeout(resolve, 400))
 	}
 }
-post("/connect", clientID.toString()).then(() => getMessagesLoop())
+post(location.pathname + "connect", clientID.toString()).then(() => getMessagesLoop())
 
 /** @type {{ x: number, y: number, zoom: number }} */
 var viewPos = { x: 0, y: 0, zoom: 1 }
