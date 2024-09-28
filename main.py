@@ -34,7 +34,7 @@ class Client(typing.TypedDict):
 
 class Whiteboard:
 	def __init__(self, id: str):
-		self.name = "New Whiteboard"
+		self.name: str = "New Whiteboard"
 		self.objects: list[SceneObject] = []
 		self.clients: list[Client] = []
 		self.id = id
@@ -46,13 +46,18 @@ class Whiteboard:
 		return str(id)
 	def saveObjectList(self):
 		f = open(f"objects/{self.id}.json", "w")
-		f.write(json.dumps(self.objects))
+		f.write(json.dumps({
+			"name": self.name,
+			"objects": self.objects
+		}))
 		f.close()
 	def loadObjectList(self):
 		if not os.path.isfile(f"objects/{self.id}.json"): return
 		f = open(f"objects/{self.id}.json", "r")
-		self.objects = json.loads(f.read())
+		data = json.loads(f.read())
 		f.close()
+		self.name = data["name"]
+		self.objects = data["objects"]
 		print("loaded", len(self.objects), "objects")
 	def purgeClientList(self):
 		pass # TODO
