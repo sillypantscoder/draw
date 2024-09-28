@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<link rel="preconnect" href="https://fonts.googleapis.com">
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+		<link href="https://fonts.googleapis.com/css2?family=Inria+Sans&display=swap" rel="stylesheet">
+		<style>
+body {
+	font-family: sans-serif;
+}
+h1 {
+	font-size: 2em;
+	padding: 2em 0;
+	text-align: center;
+	font-family: "Inria Sans", sans-serif;
+	font-weight: 400;
+	font-style: normal;
+}
+.grid {
+	display: flex;
+	justify-content: center;
+}
+.card {
+	display: inline-block;
+	height: max-content;
+	box-shadow: 0px 10px 20px 0px black;
+	margin: 1em;
+	padding: 3em;
+	border-radius: 1em;
+}
+		</style>
+	</head>
+	<body>
+		<h1>Draw</h1>
+		<div class="grid" id="whiteboards"></div>
+		<div class="grid">
+			<div class="card" style="background: #CCF;" onclick="newWhiteboard()">New whiteboard</div>
+		</div>
+		<script>
+(() => {
+	var x = new XMLHttpRequest()
+	x.open("GET", "/whiteboards")
+	x.addEventListener("loadend", () => {
+		var data = x.responseText.split("\n")
+		if (x.responseText.length == 0) {
+			var e = document.createElement("div")
+			e.classList.add("card")
+			e.innerText = "No whiteboards available"
+			document.querySelector("#whiteboards")?.appendChild(e)
+			return
+		}
+		for (var i = 0; i < data.length; i += 2) {
+			var e = document.createElement("div")
+			e.classList.add("card")
+			e.innerText = data[i]
+			document.querySelector("#whiteboards")?.appendChild(e)
+			e.setAttribute("onclick", `location.assign("/whiteboard/${data[i + 1]}/")`)
+		}
+	})
+	x.send()
+})();
+function newWhiteboard() {
+	var name = prompt("Enter the whiteboard name")
+	if (name == null) return
+	var x = new XMLHttpRequest()
+	x.open("POST", "/new")
+	x.addEventListener("loadend", () => {
+		location.assign("/whiteboard/" + x.responseText + "/")
+	})
+	x.send(name)
+}
+		</script>
+	</body>
+</html>

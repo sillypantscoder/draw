@@ -239,7 +239,8 @@ class TextObject extends SceneObject {
 		this.pos = data.pos
 		/** @type {string} */
 		this.text = data.text
-		this.elm = document.createElementNS("http://www.w3.org/1999/xhtml", "textarea")
+		/** @type {HTMLTextAreaElement} */
+		this.elm = TextObject.createTextarea()
 		this.elm.setAttribute("class", "unverified")
 		var _text = this
 		this.elm.addEventListener("click", (event) => {
@@ -287,6 +288,13 @@ class TextObject extends SceneObject {
 	collidepoint(pos) {
 		var screenPos = getScreenPosFromStagePos(pos.x, pos.y)
 		return document.elementsFromPoint(screenPos.x, screenPos.y).includes(this.elm)
+	}
+	static createTextarea() {
+		var t = document.createElementNS("http://www.w3.org/1999/xhtml", "textarea")
+		if (! (t instanceof HTMLTextAreaElement)) {
+			throw new Error("newly created element is of the wrong type!!! (This error is definitely not possible)")
+		}
+		return t
 	}
 }
 
@@ -415,6 +423,7 @@ class TrackedTouch {
 	 * @param {number} initialX
 	 * @param {number} initialY
 	 * @param {number} id
+	 * @param {boolean} isEraserButton
 	 */
 	constructor(initialX, initialY, id, isEraserButton) {
 		this.x = initialX
@@ -423,7 +432,13 @@ class TrackedTouch {
 		this.isEraserButton = isEraserButton
 		this.mode = this.getMode()
 		touches.push(this)
-		document.activeElement.blur()
+		// blur current element
+		var a = document.activeElement
+		if (a != null) {
+			if (a instanceof HTMLElement) {
+				a.blur()
+			}
+		}
 	}
 	/**
 	 * @param {number} newX
@@ -458,7 +473,12 @@ class TrackedTouch {
 		}
 		// Then, find the selected mode in the toolbar.
 		var mode = getCurrentMode()
-		if (mode == "Draw") return new DrawTouchMode(this, document.querySelector("#draw-color").value)
+		if (mode == "Draw") return new DrawTouchMode(this, (() => {
+			var color = document.querySelector("#draw-color")
+			if (color == null) throw new Error("draw color picker is missing :(")
+			if (! (color instanceof HTMLSelectElement)) throw new Error("draw color picker is weird looking :O")
+			return color.value
+		})())
 		if (mode == "Text") return new TextTouchMode(this)
 		if (mode == "Move") return new PanTouchMode(this)
 		if (mode == "Erase") return new EraseTouchMode(this)

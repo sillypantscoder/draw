@@ -2,7 +2,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import typing
 import json
 import datetime
-# import os
+import os
 
 hostName = "0.0.0.0"
 serverPort = 8060
@@ -33,28 +33,38 @@ class Client(typing.TypedDict):
 	messages: list[dict[str, typing.Any]]
 
 class Whiteboard:
-	def __init__(self):
+	def __init__(self, id: str):
+		self.name = "New Whiteboard"
 		self.objects: list[SceneObject] = []
 		self.clients: list[Client] = []
+		self.id = id
+	@staticmethod
+	def nextID():
+		id = 0
+		while os.path.exists(f"objects/{id}.json"):
+			id += 1
+		return str(id)
+	def saveObjectList(self):
+		f = open(f"objects/{self.id}.json", "w")
+		f.write(json.dumps(self.objects))
+		f.close()
+	def loadObjectList(self):
+		if not os.path.isfile(f"objects/{self.id}.json"): return
+		f = open(f"objects/{self.id}.json", "r")
+		self.objects = json.loads(f.read())
+		f.close()
+		print("loaded", len(self.objects), "objects")
+	def purgeClientList(self):
+		pass # TODO
 
-whiteboards: dict[str, Whiteboard] = {
-	"thingy": Whiteboard()
-}
+whiteboards: list[Whiteboard] = []
 
-def purgeClientList():
-	pass # TODO
-
-# def saveObjectList():
-# 	f = open("objects.json", "w")
-# 	f.write(json.dumps(objects))
-# 	f.close()
-
-# def loadObjectList():
-# 	if not os.path.isfile("objects.json"): return
-# 	f = open("objects.json", "r")
-# 	objects = json.loads(f.read())
-# 	f.close()
-# 	print("loaded", len(objects), "objects")
+def loadWhiteboards():
+	files = os.listdir("objects")
+	for f in files:
+		w = Whiteboard(f.split(".")[0])
+		w.loadObjectList()
+		whiteboards.append(w)
 
 def get(path: str) -> HttpResponse:
 	if path == "/":
@@ -63,15 +73,15 @@ def get(path: str) -> HttpResponse:
 			"headers": {
 				"Content-Type": "text/html"
 			},
-			"content": read_file("index.html")
+			"content": read_file("index/index.html")
 		}
-	elif path == "/main.js":
+	elif path == "/whiteboards":
 		return {
 			"status": 200,
 			"headers": {
-				"Content-Type": "text/javascript"
+				"Content-Type": "text/plain"
 			},
-			"content": read_file("main.js")
+			"content": "\n".join([w.name + "\n" + w.id for w in whiteboards]).encode("UTF-8")
 		}
 	elif path == "/cp2l.js":
 		return {
@@ -79,11 +89,11 @@ def get(path: str) -> HttpResponse:
 			"headers": {
 				"Content-Type": "text/javascript"
 			},
-			"content": read_file("cp2l.js")
+			"content": read_file("whiteboard/cp2l.js")
 		}
 	elif path.startswith("/whiteboard/"):
 		board_name = path.split("/")[2]
-		if board_name not in whiteboards.keys():
+		if board_name not in [w.id for w in whiteboards]:
 			return {
 				"status": 404,
 				"headers": {
@@ -91,7 +101,7 @@ def get(path: str) -> HttpResponse:
 				},
 				"content": b"Not Found"
 			}
-		board = whiteboards[board_name]
+		board = [w for w in whiteboards if w.id == board_name][0]
 		op = path.split("/")[3]
 		if op == "":
 			return {
@@ -99,7 +109,7 @@ def get(path: str) -> HttpResponse:
 				"headers": {
 					"Content-Type": "text/html"
 				},
-				"content": read_file("whiteboard.html")
+				"content": read_file("whiteboard/whiteboard.html")
 			}
 		if op == "messages":
 			clientID = int(path.split("/")[4])
@@ -128,7 +138,7 @@ def get(path: str) -> HttpResponse:
 			"headers": {
 				"Content-Type": "text/javascript"
 			},
-			"content": read_file("whiteboard.js")
+			"content": read_file("whiteboard/whiteboard.js")
 		}
 	# 404 page
 	return {
@@ -138,9 +148,19 @@ def get(path: str) -> HttpResponse:
 	}
 
 def post(path: str, body: bytes) -> HttpResponse:
-	if path.startswith("/whiteboard/"):
+	if path == "/new":
+		name = body.decode("UTF-8")
+		w = Whiteboard(Whiteboard.nextID())
+		whiteboards.append(w)
+		w.name = name
+		return {
+			"status": 200,
+			"headers": {},
+			"content": w.id.encode("UTF-8")
+		}
+	elif path.startswith("/whiteboard/"):
 		board_name = path.split("/")[2]
-		if board_name not in whiteboards.keys():
+		if board_name not in [w.id for w in whiteboards]:
 			return {
 				"status": 404,
 				"headers": {
@@ -148,7 +168,7 @@ def post(path: str, body: bytes) -> HttpResponse:
 				},
 				"content": b"Not Found"
 			}
-		board = whiteboards[board_name]
+		board = [w for w in whiteboards if w.id == board_name][0]
 		op = path.split("/")[3]
 		if op == "connect": # Register new client
 			clientID = int(body)
@@ -186,7 +206,7 @@ def post(path: str, body: bytes) -> HttpResponse:
 					"id": bodydata["id"],
 					"data": bodydata["data"]
 				})
-			# saveObjectList()
+			board.saveObjectList()
 			return {
 				"status": 200,
 				"headers": {},
@@ -202,7 +222,7 @@ def post(path: str, body: bytes) -> HttpResponse:
 							"type": "erase",
 							"id": id
 						})
-			# saveObjectList()
+			board.saveObjectList()
 			return {
 				"status": 200,
 				"headers": {},
@@ -240,7 +260,7 @@ class MyServer(BaseHTTPRequestHandler):
 		# don't output requests
 
 if __name__ == "__main__":
-	# loadObjectList()
+	loadWhiteboards()
 	running = True
 	webServer = HTTPServer((hostName, serverPort), MyServer)
 	webServer.timeout = 1
