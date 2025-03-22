@@ -19,6 +19,7 @@ h1 {
 .grid {
 	display: flex;
 	justify-content: center;
+	flex-wrap: wrap;
 }
 .card {
 	display: inline-block;
@@ -27,6 +28,15 @@ h1 {
 	margin: 1em;
 	padding: 3em;
 	border-radius: 1em;
+}
+.card > div:first-child {
+	font-weight: bold;
+	& + div {
+		color: #888;
+		& + div {
+			color: #888;
+		}
+	}
 }
 		</style>
 	</head>
@@ -49,12 +59,43 @@ h1 {
 			document.querySelector("#whiteboards")?.appendChild(e)
 			return
 		}
-		for (var i = 0; i < data.length; i += 2) {
+		for (var i = 0; i < data.length; i += 3) {
 			var e = document.createElement("div")
 			e.classList.add("card")
-			e.innerText = data[i]
+			e.appendChild(document.createElement("div")).innerText = data[i]
+			e.appendChild(document.createElement("div")).innerText = new Date(data[i + 1]).toDateString()
+			var msDiff = new Date().getTime() - new Date(data[i + 1]).getTime();
+			e.appendChild(document.createElement("div")).innerText = `${Math.floor(msDiff / (1000 * 60 * 60 * 24))} days ago`
+			e.setAttribute("style", `order: ${Math.round(new Date(data[i + 1]).getTime() / 10000000)};`)
+			var menu = e.appendChild(document.createElement("div"))
+			// Rename Button
+			var renamebtn = menu.appendChild(document.createElement("button"))
+			renamebtn.innerText = "Rename";
+			((oldname, id) => { renamebtn.addEventListener("click", () => {
+				var newname = prompt("Enter the new name", oldname)
+				if (newname == null) return
+				var x = new XMLHttpRequest()
+				x.open("POST", "/rename")
+				x.addEventListener("loadend", () => {
+					location.reload()
+				})
+				x.send(id + "\n" + newname)
+			}) })(data[i], data[i + 2]);
+			// Delete Button
+			var deletebtn = menu.appendChild(document.createElement("button"))
+			deletebtn.innerText = "Delete";
+			((id) => { deletebtn.addEventListener("click", () => {
+				var c = confirm("Are you sure you want to delete this whiteboard?")
+				if (c == null || c == false) return
+				var x = new XMLHttpRequest()
+				x.open("POST", "/delete")
+				x.addEventListener("loadend", () => {
+					location.reload()
+				})
+				x.send(id)
+			}) })(data[i + 2]);
 			document.querySelector("#whiteboards")?.appendChild(e)
-			e.setAttribute("onclick", `location.assign("/whiteboard/${data[i + 1]}/")`)
+			e.setAttribute("onclick", `location.assign("/whiteboard/${data[i + 2]}/")`)
 		}
 	})
 	x.send()

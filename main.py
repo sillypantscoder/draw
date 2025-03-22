@@ -35,6 +35,8 @@ class Client(typing.TypedDict):
 class Whiteboard:
 	def __init__(self, id: str):
 		self.name: str = "New Whiteboard"
+		self.created: datetime.datetime = datetime.datetime.now()
+		self.deleted: bool = False
 		self.objects: list[SceneObject] = []
 		self.clients: list[Client] = []
 		self.id = id
@@ -48,6 +50,8 @@ class Whiteboard:
 		f = open(f"objects/{self.id}.json", "w")
 		f.write(json.dumps({
 			"name": self.name,
+			"created": self.created.isoformat(),
+			"deleted": self.deleted,
 			"objects": self.objects
 		}))
 		f.close()
@@ -57,8 +61,10 @@ class Whiteboard:
 		data = json.loads(f.read())
 		f.close()
 		self.name = data["name"]
+		self.created = datetime.datetime.fromisoformat(data["created"])
+		self.deleted = data["deleted"]
 		self.objects = data["objects"]
-		print("loaded", len(self.objects), "objects")
+		print("loaded", len(self.objects), "objects for whiteboard with id", self.id, "(name: " + repr(self.name) + ("; deleted" if self.deleted else "") + ")")
 	def purgeClientList(self):
 		pass # TODO
 
@@ -86,7 +92,7 @@ def get(path: str) -> HttpResponse:
 			"headers": {
 				"Content-Type": "text/plain"
 			},
-			"content": "\n".join([w.name + "\n" + w.id for w in whiteboards]).encode("UTF-8")
+			"content": "\n".join([w.name + "\n" + w.created.isoformat() + "\n" + w.id for w in whiteboards if not w.deleted]).encode("UTF-8")
 		}
 	elif path == "/cp2l.js":
 		return {
@@ -127,9 +133,10 @@ def get(path: str) -> HttpResponse:
 				"headers": {},
 				"content": b""
 			}
-			r = json.dumps(board.clients[ci]["messages"])
-			board.clients[ci]["messages"] = []
-			board.clients[ci]["lastTime"] = datetime.datetime.now()
+			client = board.clients[ci]
+			r = json.dumps(client["messages"][:500])
+			client["messages"] = client["messages"][500:]
+			client["lastTime"] = datetime.datetime.now()
 			return {
 				"status": 200,
 				"headers": {
@@ -158,10 +165,37 @@ def post(path: str, body: bytes) -> HttpResponse:
 		w = Whiteboard(Whiteboard.nextID())
 		whiteboards.append(w)
 		w.name = name
+		print("New whiteboard with id:", w.id, "name:", repr(w.name))
 		return {
 			"status": 200,
 			"headers": {},
 			"content": w.id.encode("UTF-8")
+		}
+	elif path == "/rename":
+		data = body.decode("UTF-8").split("\n")
+		id = data[0]
+		newname = data[1]
+		for w in whiteboards:
+			if w.id == id:
+				print("Renamed whiteboard with id", w.id, " (old name: " + repr(w.name) + ") to:", repr(newname))
+				w.name = newname
+				w.saveObjectList()
+		return {
+			"status": 200,
+			"headers": {},
+			"content": b""
+		}
+	elif path == "/delete":
+		id = body.decode("UTF-8")
+		for w in whiteboards:
+			if w.id == id:
+				print("Deleted whiteboard with id", w.id)
+				w.deleted = True
+				w.saveObjectList()
+		return {
+			"status": 200,
+			"headers": {},
+			"content": b""
 		}
 	elif path.startswith("/whiteboard/"):
 		board_name = path.split("/")[2]
@@ -177,6 +211,7 @@ def post(path: str, body: bytes) -> HttpResponse:
 		op = path.split("/")[3]
 		if op == "connect": # Register new client
 			clientID = int(body)
+			print("login to whiteboard:", board.id, "with client id:", clientID)
 			board.clients.append({
 				"id": clientID,
 				"lastTime": datetime.datetime.now(),

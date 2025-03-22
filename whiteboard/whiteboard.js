@@ -353,10 +353,13 @@ async function getMessages() {
 		}
 	}
 }
+var debug = false
 async function getMessagesLoop() {
 	while (true) {
+		var time = new Date()
 		await getMessages()
-		await new Promise((resolve) => setTimeout(resolve, 400))
+		if (debug) console.log(new Date().getTime() - time.getTime())
+		await new Promise((resolve) => setTimeout(resolve, 500))
 	}
 }
 post(location.pathname + "connect", clientID.toString()).then(() => getMessagesLoop())
