@@ -128,8 +128,8 @@ textarea.unverified {
 		</div>
 		<div class="menu selection-window">
 			<div style="color: white;"><b id="selection-number">0</b> item<span id="selection-s">s</span> selected</div>
-			<div><button onclick="selection = []; updateViewPos(); updateSelectionWindow();">De-select</button></div>
-			<div><button onclick="selection.forEach((v) => v.removeAndSendErase()); selection = []; updateSelectionWindow();">Delete</button></div>
+			<div><button onclick="window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))">De-select</button></div>
+			<div><button onclick="window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace' }))">Delete</button></div>
 		</div>
 		<script src="/cp2l.js"></script>
 		<script src="/whiteboard.js"></script>

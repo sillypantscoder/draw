@@ -3,6 +3,8 @@ import typing
 import json
 import datetime
 import os
+import threading
+import time
 
 hostName = "0.0.0.0"
 serverPort = 8060
@@ -17,6 +19,15 @@ def write_file(filename: str, content: bytes):
 	f = open(filename, "wb")
 	f.write(content)
 	f.close()
+
+def dt(time: datetime.datetime | None = None) -> str:
+	timezone = datetime.timezone(datetime.timedelta(hours=-6))
+	t = datetime.datetime.now(timezone)
+	if time != None: t = time
+	return ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][t.weekday()] + \
+		", " + ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][t.month] + \
+		" " + str(t.day) + ("th" if t.day//10 == 1 else ("st" if t.day%10 == 1 else ("nd" if t.day%10 == 2 else ("rd" if t.day%10 == 3 else "th")))) + \
+		" at " + str(((t.hour - 1) % 12) + 1) + ":" + str(t.minute).rjust(2, '0') + ":" + str(t.second).rjust(2, '0') + " " + ("AM" if t.hour < 12 else "PM")
 
 class HttpResponse(typing.TypedDict):
 	status: int
@@ -64,9 +75,14 @@ class Whiteboard:
 		self.created = datetime.datetime.fromisoformat(data["created"])
 		self.deleted = data["deleted"]
 		self.objects = data["objects"]
-		print("loaded", len(self.objects), "objects for whiteboard with id", self.id, "(name: " + repr(self.name) + ("; deleted" if self.deleted else "") + ")")
+		print("[Draw] Loaded", len(self.objects), "objects for whiteboard with id", self.id, "(name: " + repr(self.name) + ("; deleted" if self.deleted else "") + ")")
 	def purgeClientList(self):
-		pass # TODO
+		clients = [*self.clients]
+		for c in clients:
+			timeDiff = datetime.datetime.now() - c["lastTime"]
+			if timeDiff > datetime.timedelta(seconds=10):
+				self.clients.remove(c)
+				print(f"[Draw] [{dt()}] Logout from whiteboard {self.id} with client id {c['id']}; {len(self.clients)} client(s) connected")
 
 whiteboards: list[Whiteboard] = []
 
@@ -76,6 +92,12 @@ def loadWhiteboards():
 		w = Whiteboard(f.split(".")[0])
 		w.loadObjectList()
 		whiteboards.append(w)
+
+def purge_thread():
+	while True:
+		time.sleep(3)
+		for w in whiteboards:
+			w.purgeClientList()
 
 def get(path: str) -> HttpResponse:
 	if path == "/":
@@ -165,7 +187,7 @@ def post(path: str, body: bytes) -> HttpResponse:
 		w = Whiteboard(Whiteboard.nextID())
 		whiteboards.append(w)
 		w.name = name
-		print("New whiteboard with id:", w.id, "name:", repr(w.name))
+		print(f"[Draw] [{dt()}] New whiteboard with id:", w.id, "name:", repr(w.name), "clients")
 		return {
 			"status": 200,
 			"headers": {},
@@ -177,7 +199,7 @@ def post(path: str, body: bytes) -> HttpResponse:
 		newname = data[1]
 		for w in whiteboards:
 			if w.id == id:
-				print("Renamed whiteboard with id", w.id, " (old name: " + repr(w.name) + ") to:", repr(newname))
+				print(f"[Draw] [{dt()}] Renamed whiteboard with id", w.id, " (old name: " + repr(w.name) + ") to:", repr(newname))
 				w.name = newname
 				w.saveObjectList()
 		return {
@@ -189,7 +211,7 @@ def post(path: str, body: bytes) -> HttpResponse:
 		id = body.decode("UTF-8")
 		for w in whiteboards:
 			if w.id == id:
-				print("Deleted whiteboard with id", w.id)
+				print(f"[Draw] [{dt()}] Deleted whiteboard with id", w.id)
 				w.deleted = True
 				w.saveObjectList()
 		return {
@@ -211,7 +233,7 @@ def post(path: str, body: bytes) -> HttpResponse:
 		op = path.split("/")[3]
 		if op == "connect": # Register new client
 			clientID = int(body)
-			print("login to whiteboard:", board.id, "with client id:", clientID)
+			print(f"[Draw] [{dt()}] Login to whiteboard {board.id} with client id {clientID}; {len(board.clients) + 1} client(s) connected")
 			board.clients.append({
 				"id": clientID,
 				"lastTime": datetime.datetime.now(),
@@ -240,8 +262,8 @@ def post(path: str, body: bytes) -> HttpResponse:
 					"id": bodydata["id"],
 					"data": bodydata["data"]
 				})
-			for i in range(len(board.clients)):
-				board.clients[i]["messages"].append({
+			for c in range(len(board.clients)):
+				board.clients[c]["messages"].append({
 					"type": "create_object",
 					"id": bodydata["id"],
 					"data": bodydata["data"]
@@ -257,10 +279,26 @@ def post(path: str, body: bytes) -> HttpResponse:
 			for i in [*board.objects]:
 				if i["id"] == id:
 					board.objects.remove(i)
-					for i in range(len(board.clients)):
-						board.clients[i]["messages"].append({
+					for c in range(len(board.clients)):
+						board.clients[c]["messages"].append({
 							"type": "erase",
 							"id": id
+						})
+			board.saveObjectList()
+			return {
+				"status": 200,
+				"headers": {},
+				"content": b""
+			}
+		if op == "get":
+			id = int(body)
+			for i in [*board.objects]:
+				if i["id"] == id:
+					for c in range(len(board.clients)):
+						board.clients[c]["messages"].append({
+							"type": "create_object",
+							"id": id,
+							"data": i["data"]
 						})
 			board.saveObjectList()
 			return {
@@ -305,6 +343,9 @@ if __name__ == "__main__":
 	webServer = HTTPServer((hostName, serverPort), MyServer)
 	webServer.timeout = 1
 	print("Server started http://%s:%s" % (hostName, serverPort))
+	th = threading.Thread(target=purge_thread, name="purge_thread", args=())
+	th.daemon = True
+	th.start()
 	while running:
 		try:
 			webServer.handle_request()

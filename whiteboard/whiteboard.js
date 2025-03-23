@@ -119,7 +119,7 @@ function post(path, body) {
 	})
 }
 
-var clientID = Math.floor(Math.random() * 100000)
+var clientID = Math.floor(Math.random() * 100000000)
 
 /**
  * @param {{ x: number, y: number }[]} points
@@ -156,6 +156,9 @@ class SceneObject {
 	sendEdit() {
 		// this.elm.setAttribute("class", "unverified")
 		// SceneObject.sendCreateObject(this.id, { type: "...", ... })
+	}
+	revertToServer() {
+		post(location.pathname + "get", this.id.toString())
 	}
 	/**
 	 * @param {number} id
@@ -782,6 +785,7 @@ class MoveSelectionTouchMode extends TouchMode {
 	 */
 	constructor(touch) {
 		super(touch)
+		this.moved = 0
 	}
 	/**
 	 * @param {number} previousX
@@ -797,6 +801,7 @@ class MoveSelectionTouchMode extends TouchMode {
 			var dy = (newY - previousY) / viewPos.zoom
 			o.move(dx, dy)
 		}
+		this.moved += 1
 		// Update
 		updateViewPos()
 	}
@@ -805,6 +810,14 @@ class MoveSelectionTouchMode extends TouchMode {
 	 * @param {number} previousY
 	 */
 	onEnd(previousX, previousY) {
+		// If not moved
+		if (this.moved <= 3) {
+			this.onCancel(previousX, previousY)
+			selection = []
+			updateViewPos();
+			updateSelectionWindow();
+			return;
+		}
 		// Save seletion
 		for (var i = 0; i < selection.length; i++) {
 			var o = selection[i]
@@ -816,6 +829,11 @@ class MoveSelectionTouchMode extends TouchMode {
 	 * @param {number} previousY
 	 */
 	onCancel(previousX, previousY) {
+		// Revert all the items
+		for (var i = 0; i < selection.length; i++) {
+			var o = selection[i]
+			o.revertToServer()
+		}
 	}
 	toString() {
 		return `MoveSelectionTouchMode {}`
@@ -888,8 +906,9 @@ class SelectTouchMode extends TouchMode {
 		var rectPos = { x, y }
 		var rectSize = { x: width, y: height }
 		// Select items!
-		selection = []
+		if (!shiftKeyDown) selection = []
 		for (var i = 0; i < objects.length; i++) {
+			if (selection.includes(objects[i])) continue;
 			if (objects[i].colliderect(rectPos, rectSize)) {
 				selection.push(objects[i])
 			}
@@ -1043,3 +1062,23 @@ theSVG.parentElement?.addEventListener("touchend", (e) => {
 	handleTouches(e.touches)
 	return false
 }, false);
+
+var shiftKeyDown = false
+window.addEventListener("keydown", (e) => {
+	if (e.key == "Shift") shiftKeyDown = true
+	if (e.key == "Escape") {
+		// Remove selection
+		selection = [];
+		updateViewPos();
+		updateSelectionWindow();
+	}
+	if (e.key == "Backspace" || e.key == "Delete") {
+		// Delete selection
+		selection.forEach((v) => v.removeAndSendErase());
+		selection = [];
+		updateSelectionWindow();
+	}
+})
+window.addEventListener("keyup", (e) => {
+	if (e.key == "Shift") shiftKeyDown = false
+})
