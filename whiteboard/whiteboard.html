@@ -39,6 +39,10 @@ textarea {
 textarea.unverified {
 	opacity: 0.5;
 }
+.focus-shadow {
+	box-shadow: 0em 0.3em 1em 0em blue;
+	color: blue;
+}
 
 .menu {
 	position: absolute;
@@ -48,39 +52,63 @@ textarea.unverified {
 	border-radius: 1em;
 	overflow: hidden;
 	background: black;
+	padding: 0.5em;
 }
-.menu > * {
-	padding: 1em;
-	padding-bottom: 0;
+.menu-option {
+	padding: 0.5em;
 	transition: filter 0.3s;
 	filter: none;
+	display: inline-block;
 }
-.menu > *:last-child {
-	padding-bottom: 1em;
-}
-.menu > * svg {
+.menu-option svg {
 	width: 2em;
 	height: 2em;
 }
 .menu-option-selected {
 	filter: invert();
 }
-/* .popup {} */
-.popup.inactive {
+
+.selection-window {
+	font-size: 1.3em;
+	margin-bottom: 1rem;
+	margin-right: 1rem;
+	left: unset;
+	right: 0em;
+	padding: 1em;
+	bottom: -11em;
+	transition: bottom ease-in-out 0.4s;
+}
+.selection-window.active {
+	bottom: 0em;
+}
+#selection-s.hidden {
 	display: none;
+}
+.selection-window button {
+	padding: 1em;
+	width: 100%;
+	font-size: 1em;
 }
 		</style>
 	</head>
 	<body>
 		<div class="mainContainer"></div>
 		<div class="menu">
-			<div class="menu-option menu-option-selected" data-mode="Draw"><svg viewBox="0 0 20 20"><rect x="0" y="0" width="20" height="20" rx="5" fill="black" /><path d="M 13 2 L 18 7 L 7 18 L 2 18 L 2 13 Z M 13 4 L 4 13 L 7 16 L 16 7 Z" fill="white" /></svg></div>
-			<div class="menu-option" data-mode="Text"><svg viewBox="0 0 20 20"><rect x="0" y="0" width="20" height="20" rx="5" fill="black" /><path d="M 2 2 L 18 2 L 18 6 L 12 6 L 12 18 L 8 18 L 8 6 L 2 6 Z" fill="white" /></svg></div>
-			<div class="menu-option" data-mode="Move"><svg viewBox="0 0 20 20"><rect x="0" y="0" width="20" height="20" rx="5" fill="black" /><path d="M 10 2 L 13 6 L 11 6 L 11 9 L 14 9 L 14 7 L 18 10 L 14 13 L 14 11 L 11 11 L 11 14 L 13 14 L 10 18 L 7 14 L 9 14 L 9 11 L 6 11 L 6 13 L 2 10 L 6 7 L 6 9 L 9 9 L 9 6 L 7 6 Z" fill="white" /></svg></div>
-			<div class="menu-option" data-mode="Erase"><svg viewBox="0 0 20 20"><rect x="0" y="0" width="20" height="20" rx="5" fill="black" /><path d="M 13 2 L 18 7 L 7 18 L 2 13 Z M 10 7 L 13 10 L 16 7 L 13 4 Z" fill="white" /></svg></div>
+			<div>
+				<div class="menu-option" data-mode="Move"><svg viewBox="0 0 20 20"><rect x="0" y="0" width="20" height="20" rx="5" fill="black" /><path d="M 10 2 L 13 6 L 11 6 L 11 9 L 14 9 L 14 7 L 18 10 L 14 13 L 14 11 L 11 11 L 11 14 L 13 14 L 10 18 L 7 14 L 9 14 L 9 11 L 6 11 L 6 13 L 2 10 L 6 7 L 6 9 L 9 9 L 9 6 L 7 6 Z" fill="white" /></svg></div>
+				<div class="menu-option menu-option-selected" data-mode="Draw"><svg viewBox="0 0 20 20"><rect x="0" y="0" width="20" height="20" rx="5" fill="black" /><path d="M 13 2 L 18 7 L 7 18 L 2 18 L 2 13 Z M 13 4 L 4 13 L 7 16 L 16 7 Z" fill="white" /></svg></div>
+			</div>
+			<div>
+				<div class="menu-option" data-mode="Select"><svg viewBox="0 0 20 20"><rect x="0" y="0" width="20" height="20" rx="5" fill="black" /><path d="M 2 2 L 8 2 L 8 4 L 4 4 L 4 7 L 2 7 Z M 12 2 L 18 2 L 18 7 L 16 7 L 16 4 L 12 4 Z M 16 12 L 18 12 L 18 18 L 12 18 L 12 16 L 16 16 Z M 8 16 L 8 18 L 2 18 L 2 12 L 4 12 L 4 16 Z" fill="white" /></svg></div>
+				<div class="menu-option" data-mode="Text"><svg viewBox="0 0 20 20"><rect x="0" y="0" width="20" height="20" rx="5" fill="black" /><path d="M 2 2 L 18 2 L 18 6 L 12 6 L 12 18 L 8 18 L 8 6 L 2 6 Z" fill="white" /></svg></div>
+			</div>
+			<div>
+				<div class="menu-option" data-mode="Quit"><svg viewBox="0 0 20 20"><rect x="0" y="0" width="20" height="20" rx="5" fill="black" /><path d="M 2 4 L 4 2 L 18 16 L 16 18 Z M 2 16 L 16 2 L 18 4 L 4 18 Z" fill="white" /></svg></div>
+				<div class="menu-option" data-mode="Erase"><svg viewBox="0 0 20 20"><rect x="0" y="0" width="20" height="20" rx="5" fill="black" /><path d="M 13 2 L 18 7 L 7 18 L 2 13 Z M 10 7 L 13 10 L 16 7 L 13 4 Z" fill="white" /></svg></div>
+			</div>
 			<!-- <div class="menu-button" data-mode="Settings"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><rect x="0" y="0" width="20" height="20" rx="5" fill="black" /><rect x="8" y="2" width="4" height="16" fill="white" /><rect x="8" y="2" width="4" height="16" transform="rotate(60)" transform-origin="center" fill="white" /><rect x="8" y="2" width="4" height="16" transform="rotate(120)" transform-origin="center" fill="white" /><circle cx="10" cy="10" r="6" fill="white" /><circle cx="10" cy="10" r="3" fill="black" /></svg></div> -->
 		</div>
-		<div class="menu" style="left: 5em;">
+		<div class="menu" style="left: 8em; padding: 1em;">
 			<div style="color: white;">Mode: <b id="mode-output">Draw</b></div>
 			<div><select id="draw-color" oninput="this.blur()">
 				<option value="black" selected>Black</option>
@@ -98,7 +126,11 @@ textarea.unverified {
 				<option value="brown">Brown</option>
 			</select></div>
 		</div>
-		<div class="popup inactive"></div>
+		<div class="menu selection-window">
+			<div style="color: white;"><b id="selection-number">0</b> item<span id="selection-s">s</span> selected</div>
+			<div><button onclick="selection = []; updateViewPos(); updateSelectionWindow();">De-select</button></div>
+			<div><button onclick="selection.forEach((v) => v.removeAndSendErase()); selection = []; updateSelectionWindow();">Delete</button></div>
+		</div>
 		<script src="/cp2l.js"></script>
 		<script src="/whiteboard.js"></script>
 	</body>

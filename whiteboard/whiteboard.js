@@ -65,12 +65,27 @@ document.querySelector(".menu")?.addEventListener("click", (event) => {
 		if (menuoption.classList.contains("menu-option")) break;
 		menuoption = menuoption.parentElement
 	}
+	// If we clicked on a menu option:
 	if (menuoption != null) {
+		// Remove the current selected option.
 		document.querySelector('.menu-option-selected')?.classList.remove('menu-option-selected');
+		// Add the new selected option.
 		menuoption.classList.add("menu-option-selected")
+		// Quit button
+		if (menuoption.dataset.mode == "Quit") {
+			location.assign("/")
+			return
+		}
 	}
+	// Set mode output
 	var modeOutput = document.querySelector('#mode-output')
 	if (modeOutput != null) modeOutput.textContent = getCurrentMode()
+	// De-select items
+	if (menuoption?.dataset.mode != "Move") {
+		selection = []
+		updateViewPos()
+		updateSelectionWindow()
+	}
 }, false)
 
 /**
@@ -120,7 +135,7 @@ function pointsToPath(points) {
 class SceneObject {
 	/**
 	 * @param {number} id
-	 * @param {Object.<string, any>} data
+	 * @param {Object<string, any>} data
 	 */
 	constructor(id, data) {
 		this.data = data
@@ -138,9 +153,13 @@ class SceneObject {
 		this.remove()
 		SceneObject.sendErase(this.id)
 	}
+	sendEdit() {
+		// this.elm.setAttribute("class", "unverified")
+		// SceneObject.sendCreateObject(this.id, { type: "...", ... })
+	}
 	/**
 	 * @param {number} id
-	 * @param {Object.<string, any>} data
+	 * @param {Object<string, any>} data
 	 */
 	static sendCreateObject(id, data) {
 		return post(location.pathname + "create_object", JSON.stringify({
@@ -155,7 +174,7 @@ class SceneObject {
 		return post(location.pathname + "erase", id.toString())
 	}
 	/**
-	 * @param {Object.<string, any>} data
+	 * @param {Object<string, any>} data
 	 * @param {number} id
 	 * @returns {SceneObject}
 	 */
@@ -166,7 +185,7 @@ class SceneObject {
 		return o
 	}
 	/**
-	 * @param {Object.<string, any>} data
+	 * @param {Object<string, any>} data
 	 * @returns {SceneObject}
 	 */
 	static createFromData(data) {
@@ -174,7 +193,7 @@ class SceneObject {
 		return this.createFromDataAndID(data, id)
 	}
 	/**
-	 * @param {Object.<string, any>} data
+	 * @param {Object<string, any>} data
 	 */
 	static createAndSendFromData(data) {
 		var o = this.createFromData(data)
@@ -184,11 +203,24 @@ class SceneObject {
 	collidepoint(pos) {
 		return true
 	}
+	/**
+	 * @param {{ x: number, y: number }} pos
+	 * @param {{ x: number, y: number }} size
+	 */
+	colliderect(pos, size) {
+		return true
+	}
+	/**
+	 * @param {number} x
+	 * @param {number} y
+	 */
+	move(x, y) {
+	}
 }
 class DrawingObject extends SceneObject {
 	/**
 	 * @param {number} id
-	 * @param {Object.<string, any>} data
+	 * @param {Object<string, any>} data
 	 */
 	constructor(id, data) {
 		super(id, data)
@@ -197,8 +229,6 @@ class DrawingObject extends SceneObject {
 		this.color = data.color
 		this.elm = document.createElementNS("http://www.w3.org/2000/svg", "path")
 		this.elm.setAttribute("fill", "none")
-		this.elm.setAttribute("stroke", this.color)
-		this.elm.setAttribute("stroke-width", "5")
 		this.elm.setAttribute("opacity", "0.5")
 		this.update()
 	}
@@ -212,11 +242,21 @@ class DrawingObject extends SceneObject {
 	update() {
 		this.elm.setAttribute("d", pointsToPath(this.path.map((v) => getScreenPosFromStagePos(v.x, v.y))))
 		// this.elm.setAttribute("stroke-width", (5 * viewPos.zoom).toString())
-		this.elm.setAttribute("stroke", this.color)
+		if (selection.indexOf(this) != -1) {
+			this.elm.setAttribute("stroke", "blue")
+			this.elm.setAttribute("stroke-width", "8")
+		} else {
+			this.elm.setAttribute("stroke", this.color)
+			this.elm.setAttribute("stroke-width", "5")
+		}
 	}
 	remove() {
 		super.remove()
 		this.elm.remove()
+	}
+	sendEdit() {
+		this.elm.setAttribute("opacity", "0.5")
+		SceneObject.sendCreateObject(this.id, { type: "drawing", d: this.path, color: this.color })
 	}
 	/** @param {{ x: number, y: number }} pos */
 	collidepoint(pos) {
@@ -227,11 +267,34 @@ class DrawingObject extends SceneObject {
 		}
 		return false
 	}
+	/**
+	 * @param {{ x: number, y: number }} pos
+	 * @param {{ x: number, y: number }} size
+	 */
+	colliderect(pos, size) {
+		for (var i = 0; i < this.path.length; i++) {
+			var px = this.path[i].x
+			var py = this.path[i].y
+			if (px >= pos.x && px <= pos.x + size.x && py >= pos.y && py <= pos.y + size.y) return true
+		}
+		return false;
+	}
+	/**
+	 * @param {number} x
+	 * @param {number} y
+	 */
+	move(x, y) {
+		for (var i = 0; i < this.path.length; i++) {
+			this.path[i].x += x
+			this.path[i].y += y
+		}
+		this.update()
+	}
 }
 class TextObject extends SceneObject {
 	/**
 	 * @param {number} id
-	 * @param {Object.<string, any>} data
+	 * @param {Object<string, any>} data
 	 */
 	constructor(id, data) {
 		super(id, data)
@@ -263,8 +326,7 @@ class TextObject extends SceneObject {
 		})
 		this.elm.addEventListener("blur", (event) => {
 			_text.text = _text.elm.value
-			_text.elm.setAttribute("class", "unverified")
-			SceneObject.sendCreateObject(_text.id, { type: "text", text: _text.elm.value, pos: _text.pos })
+			_text.sendEdit()
 		})
 		requestAnimationFrame(() => _text.update())
 	}
@@ -279,6 +341,12 @@ class TextObject extends SceneObject {
 		if (document.activeElement != this.elm) this.elm.value = this.text
 		this.elm.setAttribute("style", `top: ${(this.pos.y * viewPos.zoom) + viewPos.y}px; left: ${(this.pos.x * viewPos.zoom) + viewPos.x}px; transform: scale(${viewPos.zoom}); transform-origin: 0px 0px;`)
 		this.elm.dispatchEvent(new KeyboardEvent("input"))
+		// Focus
+		if (selection.indexOf(this) != -1) {
+			this.elm.classList.add("focus-shadow")
+		} else {
+			this.elm.classList.remove("focus-shadow")
+		}
 	}
 	remove() {
 		super.remove()
@@ -289,6 +357,29 @@ class TextObject extends SceneObject {
 		var screenPos = getScreenPosFromStagePos(pos.x, pos.y)
 		return document.elementsFromPoint(screenPos.x, screenPos.y).includes(this.elm)
 	}
+	/**
+	 * @param {{ x: number, y: number }} pos
+	 * @param {{ x: number, y: number }} size
+	 */
+	colliderect(pos, size) {
+		var elementRect = this.elm.getBoundingClientRect()
+		var stageSize = { x: elementRect.width * viewPos.zoom, y: elementRect.height * viewPos.zoom }
+		// stagePos = this.pos
+		return pos.x <= this.pos.x + stageSize.x && pos.x + size.x >= this.pos.x && pos.y <= this.pos.y + stageSize.y && pos.y + size.y >= this.pos.y
+	}
+	/**
+	 * @param {number} x
+	 * @param {number} y
+	 */
+	move(x, y) {
+		this.pos.x += x
+		this.pos.y += y
+		this.update()
+	}
+	sendEdit() {
+		this.elm.setAttribute("class", "unverified")
+		SceneObject.sendCreateObject(this.id, { type: "text", text: this.elm.value, pos: this.pos })
+	}
 	static createTextarea() {
 		var t = document.createElementNS("http://www.w3.org/1999/xhtml", "textarea")
 		if (! (t instanceof HTMLTextAreaElement)) {
@@ -298,7 +389,7 @@ class TextObject extends SceneObject {
 	}
 }
 
-/** @type {Object.<string, typeof SceneObject>} */
+/** @type {Object<string, typeof SceneObject>} */
 var objectTypes = {
 	"drawing": DrawingObject,
 	"text": TextObject
@@ -307,20 +398,34 @@ var objectTypes = {
 /** @type {SceneObject[]} */
 var objects = []
 
+/** @type {SceneObject[]} */
+var selection = []
+
 /**
  * @param {number} id
- * @param {Object.<string, any>} data
+ * @param {Object<string, any>} data
  */
 function importObject(id, data) {
+	var wasSelected = false
 	for (var i = 0; i < objects.length; i++) {
 		if (objects[i].id == id) {
-			// re-send
+			// check for selection
+			if (selection.includes(objects[i])) {
+				selection.splice(selection.indexOf(objects[i]), 1)
+				wasSelected = true
+			}
+			// data is over-written
 			objects[i].remove()
 		}
 	}
 	// create the object
 	var o = SceneObject.createFromDataAndID(data, id)
 	o.verify()
+	// re-select
+	if (wasSelected) {
+		selection.push(o)
+		o.update()
+	}
 }
 /**
  * @param {number} id
@@ -341,7 +446,7 @@ async function getMessages() {
 		alert("Lost connection with the server!")
 		throw e
 	}
-	/** @type {({ type: "create_object", id: number, data: Object.<string, any> } | { "type": "erase", id: number })[]} */
+	/** @type {({ type: "create_object", id: number, data: Object<string, any> } | { "type": "erase", id: number })[]} */
 	var messages = JSON.parse(data)
 	for (var i = 0; i < messages.length; i++) {
 		var msg = messages[i]
@@ -367,7 +472,7 @@ post(location.pathname + "connect", clientID.toString()).then(() => getMessagesL
 /** @type {{ x: number, y: number, zoom: number }} */
 var viewPos = { x: 0, y: 0, zoom: 1 }
 
-/** @returns {"Draw" | "Text" | "Move" | "Erase"} */
+/** @returns {"Draw" | "Text" | "Move" | "Select" | "Erase"} */
 function getCurrentMode() {
 	// @ts-ignore
 	return document.querySelector(".menu-option-selected").dataset.mode
@@ -380,6 +485,25 @@ function updateViewPos() {
 	for (var i = 0; i < objects.length; i++) {
 		objects[i].update()
 	}
+}
+function updateSelectionWindow() {
+	// update window
+	var window = document.querySelector(".selection-window")
+	if (window == null) throw new Error(".selection-window is missing")
+	if (selection.length == 0) {
+		window.classList.remove("active")
+	} else {
+		window.classList.add("active")
+	}
+	// update number
+	var number = document.querySelector("#selection-number")
+	if (number == null) throw new Error("#selection-number is missing")
+	number.textContent = selection.length.toString();
+	// update s
+	var s = document.querySelector("#selection-s")
+	if (s == null) throw new Error("#selection-s is missing")
+	if (selection.length == 1) s.classList.add("hidden");
+	else s.classList.remove("hidden");
 }
 /**
  * @param {number} x
@@ -483,7 +607,11 @@ class TrackedTouch {
 			return color.value
 		})())
 		if (mode == "Text") return new TextTouchMode(this)
-		if (mode == "Move") return new PanTouchMode(this)
+		if (mode == "Move") {
+			if (selection.length >= 1) return new MoveSelectionTouchMode(this)
+			return new PanTouchMode(this)
+		}
+		if (mode == "Select") return new SelectTouchMode(this)
 		if (mode == "Erase") return new EraseTouchMode(this)
 		// Uhhhh.....
 		return new PanTouchMode(this)
@@ -646,6 +774,138 @@ class PanTouchMode extends TouchMode {
 	}
 	toString() {
 		return `PanTouchMode {}`
+	}
+}
+class MoveSelectionTouchMode extends TouchMode {
+	/**
+	 * @param {TrackedTouch} touch
+	 */
+	constructor(touch) {
+		super(touch)
+	}
+	/**
+	 * @param {number} previousX
+	 * @param {number} previousY
+	 * @param {number} newX
+	 * @param {number} newY
+	 */
+	onMove(previousX, previousY, newX, newY) {
+		// Shift selection
+		for (var i = 0; i < selection.length; i++) {
+			var o = selection[i]
+			var dx = (newX - previousX) / viewPos.zoom
+			var dy = (newY - previousY) / viewPos.zoom
+			o.move(dx, dy)
+		}
+		// Update
+		updateViewPos()
+	}
+	/**
+	 * @param {number} previousX
+	 * @param {number} previousY
+	 */
+	onEnd(previousX, previousY) {
+		// Save seletion
+		for (var i = 0; i < selection.length; i++) {
+			var o = selection[i]
+			o.sendEdit()
+		}
+	}
+	/**
+	 * @param {number} previousX
+	 * @param {number} previousY
+	 */
+	onCancel(previousX, previousY) {
+	}
+	toString() {
+		return `MoveSelectionTouchMode {}`
+	}
+}
+class SelectTouchMode extends TouchMode {
+	/**
+	 * @param {TrackedTouch} touch
+	 */
+	constructor(touch) {
+		super(touch)
+		/** @type {{ x: number, y: number }} */
+		this.startPos = getStagePosFromScreenPos(touch.x, touch.y)
+		/** @type {{ x: number, y: number }} */
+		this.endPos = getStagePosFromScreenPos(touch.x, touch.y)
+		/** @type {SVGRectElement} */
+		this.elm = document.createElementNS("http://www.w3.org/2000/svg", "rect")
+		this.elm.setAttribute("fill", "#AAF8")
+		theSVG.appendChild(this.elm)
+	}
+	/**
+	 * @param {number} previousX
+	 * @param {number} previousY
+	 * @param {number} newX
+	 * @param {number} newY
+	 */
+	onMove(previousX, previousY, newX, newY) {
+		this.endPos = getStagePosFromScreenPos(newX, newY)
+		// Get screen locations
+		var startStagePos = getScreenPosFromStagePos(this.startPos.x, this.startPos.y)
+		var endStagePos = getScreenPosFromStagePos(this.endPos.x, this.endPos.y)
+		// Apply rect width and height
+		var width = endStagePos.x - startStagePos.x
+		if (width >= 0) {
+			this.elm.setAttribute("x", startStagePos.x.toString())
+			this.elm.setAttribute("width", width.toString())
+		} else {
+			this.elm.setAttribute("x", (startStagePos.x + width).toString())
+			this.elm.setAttribute("width", (-width).toString())
+		}
+		var height = endStagePos.y - startStagePos.y
+		if (height >= 0) {
+			this.elm.setAttribute("y", startStagePos.y.toString())
+			this.elm.setAttribute("height", height.toString())
+		} else {
+			this.elm.setAttribute("y", (startStagePos.y + height).toString())
+			this.elm.setAttribute("height", (-height).toString())
+		}
+	}
+	/**
+	 * @param {number} previousX
+	 * @param {number} previousY
+	 */
+	onEnd(previousX, previousY) {
+		// Remove current display elm
+		this.elm.remove()
+		// Normalize the rectangle
+		var x = this.startPos.x
+		var y = this.startPos.y
+		var width = this.endPos.x - this.startPos.x
+		if (width < 0) {
+			x = this.endPos.x
+			width = -width
+		}
+		var height = this.endPos.y - this.startPos.y
+		if (height < 0) {
+			y = this.endPos.y
+			height = -height
+		}
+		var rectPos = { x, y }
+		var rectSize = { x: width, y: height }
+		// Select items!
+		selection = []
+		for (var i = 0; i < objects.length; i++) {
+			if (objects[i].colliderect(rectPos, rectSize)) {
+				selection.push(objects[i])
+			}
+		}
+		updateViewPos()
+		updateSelectionWindow()
+	}
+	/**
+	 * @param {number} previousX
+	 * @param {number} previousY
+	 */
+	onCancel(previousX, previousY) {
+		this.elm.remove()
+	}
+	toString() {
+		return `SelectTouchMode { start: ${this.startPos.x}, ${this.startPos.y}, end: ${this.endPos.x}, ${this.endPos.y} }`
 	}
 }
 class EraseTouchMode extends TouchMode {
