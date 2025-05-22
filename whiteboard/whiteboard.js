@@ -88,6 +88,17 @@ document.querySelector(".menu")?.addEventListener("click", (event) => {
 	}
 }, false)
 
+var _requests = 0
+async function staggerRequests() {
+	while (_requests >= 3) {
+		await new Promise((resolve) => setTimeout(resolve, 50));
+	}
+	_requests += 1;
+	setTimeout(() => {
+		_requests -= 1;
+	}, 200)
+}
+
 /**
  * @param {string} path
  * @returns {Promise<string>}
@@ -100,7 +111,7 @@ function get(path) {
 			if (x.status == 200) resolve(x.responseText)
 			else reject(x.status)
 		})
-		x.send()
+		staggerRequests().then(() => x.send())
 	})
 }
 /**
@@ -115,7 +126,7 @@ function post(path, body) {
 		x.addEventListener("loadend", () => {
 			resolve()
 		})
-		x.send(body)
+		staggerRequests().then(() => x.send(body))
 	})
 }
 
@@ -151,7 +162,7 @@ class SceneObject {
 	}
 	removeAndSendErase() {
 		this.remove()
-		SceneObject.sendErase(this.id)
+		return SceneObject.sendErase(this.id)
 	}
 	sendEdit() {
 		// this.elm.setAttribute("class", "unverified")
@@ -159,6 +170,9 @@ class SceneObject {
 	}
 	revertToServer() {
 		post(location.pathname + "get", this.id.toString())
+	}
+	createData() {
+		return {}
 	}
 	/**
 	 * @param {number} id
@@ -189,6 +203,16 @@ class SceneObject {
 	}
 	/**
 	 * @param {Object<string, any>} data
+	 * @param {number} id
+	 * @returns {SceneObject}
+	 */
+	static createAndSendFromDataAndID(data, id) {
+		var o = this.createFromDataAndID(data, id)
+		this.sendCreateObject(id, data)
+		return o
+	}
+	/**
+	 * @param {Object<string, any>} data
 	 * @returns {SceneObject}
 	 */
 	static createFromData(data) {
@@ -201,6 +225,7 @@ class SceneObject {
 	static createAndSendFromData(data) {
 		var o = this.createFromData(data)
 		this.sendCreateObject(o.id, data)
+		return o
 	}
 	/** @param {{ x: number, y: number }} pos */
 	collidepoint(pos) {
@@ -259,7 +284,10 @@ class DrawingObject extends SceneObject {
 	}
 	sendEdit() {
 		this.elm.setAttribute("opacity", "0.5")
-		SceneObject.sendCreateObject(this.id, { type: "drawing", d: this.path, color: this.color })
+		doAction(new USIEditObject(this, this.data, this.createData()))
+	}
+	createData() {
+		return { type: "drawing", d: this.path, color: this.color }
 	}
 	/** @param {{ x: number, y: number }} pos */
 	collidepoint(pos) {
@@ -381,7 +409,10 @@ class TextObject extends SceneObject {
 	}
 	sendEdit() {
 		this.elm.setAttribute("class", "unverified")
-		SceneObject.sendCreateObject(this.id, { type: "text", text: this.elm.value, pos: this.pos })
+		doAction(new USIEditObject(this, this.data, this.createData()))
+	}
+	createData() {
+		return { type: "text", text: this.elm.value, pos: this.pos }
 	}
 	static createTextarea() {
 		var t = document.createElementNS("http://www.w3.org/1999/xhtml", "textarea")
@@ -431,6 +462,19 @@ function importObject(id, data) {
 	}
 }
 /**
+ * Erase the object with the provided ID. Also, send this to the server
+ * @param {number} id
+ */
+function removeAndSendEraseForID(id) {
+	for (var i = 0; i < objects.length; i++) {
+		if (objects[i].id == id) {
+			// erase this
+			return objects[i].removeAndSendErase()
+		}
+	}
+}
+/**
+ * Erase the object with the provided ID
  * @param {number} id
  */
 function importErase(id) {
@@ -467,7 +511,7 @@ async function getMessagesLoop() {
 		var time = new Date()
 		await getMessages()
 		if (debug) console.log(new Date().getTime() - time.getTime())
-		await new Promise((resolve) => setTimeout(resolve, 500))
+		await new Promise((resolve) => setTimeout(resolve, 600))
 	}
 }
 post(location.pathname + "connect", clientID.toString()).then(() => getMessagesLoop())
@@ -543,7 +587,7 @@ function erase(pos) {
 	var o = [...objects]
 	for (var i = 0; i < o.length; i++) {
 		if (o[i].collidepoint(pos)) {
-			o[i].removeAndSendErase()
+			doAction(new USIEraseObject(o[i].data, o[i]))
 		}
 	}
 }
@@ -688,11 +732,11 @@ class DrawTouchMode extends TouchMode {
 		this.elm.remove()
 		// Add drawing to screen
 		if (this.points.length > 6) {
-			SceneObject.createAndSendFromData({
+			doAction(new USICreateObject({
 				"type": "drawing",
 				"d": this.points,
 				"color": this.color
-			})
+			}))
 		}
 	}
 	/**
@@ -726,11 +770,11 @@ class TextTouchMode extends TouchMode {
 	 * @param {number} previousY
 	 */
 	onEnd(previousX, previousY) {
-		SceneObject.createAndSendFromData({
+		doAction(new USICreateObject({
 			"type": "text",
 			"text": "Enter text here",
 			"pos": getStagePosFromScreenPos(previousX, previousY)
-		})
+		}))
 	}
 	/**
 	 * @param {number} previousX
@@ -818,10 +862,10 @@ class MoveSelectionTouchMode extends TouchMode {
 			updateSelectionWindow();
 			return;
 		}
-		// Save seletion
+		// Save selection
 		for (var i = 0; i < selection.length; i++) {
 			var o = selection[i]
-			o.sendEdit()
+			doAction(new USIEditObject(o, null, o.createData()))
 		}
 	}
 	/**
@@ -1063,6 +1107,72 @@ theSVG.parentElement?.addEventListener("touchend", (e) => {
 	return false
 }, false);
 
+class UndoStackItem {
+	constructor() {}
+	undo() {}
+	redo() {}
+}
+class DummyUndoStackItem extends UndoStackItem {
+	/** @param {number} n */
+	constructor(n) { super(); this.n = n; }
+	undo() { console.log("undo", this.n) }
+	redo() { console.log("redo", this.n) }
+}
+class USICreateObject extends UndoStackItem {
+	/** @param {Object} data */
+	constructor(data) { super(); this.data = data; this.obj = null; }
+	undo() { removeAndSendEraseForID(this.obj == null ? -1 : this.obj.id); }
+	redo() { this.obj = SceneObject.createAndSendFromData(this.data) }
+}
+class USIEraseObject extends UndoStackItem {
+	/**
+	 * @param {Object} data
+	 * @param {SceneObject} obj
+	 */
+	constructor(data, obj) { super(); this.data = data; this.obj = obj; }
+	undo() { this.obj = SceneObject.createAndSendFromData(this.data) }
+	redo() { removeAndSendEraseForID(this.obj.id) }
+}
+class USIEditObject extends UndoStackItem {
+	/**
+	 * @param {SceneObject} obj
+	 * @param {Object | null} oldData
+	 * @param {Object} newData
+	 */
+	constructor(obj, oldData, newData) { super(); this.oldData = oldData; this.newData = newData; this.obj = obj; }
+	undo() {
+		if (this.oldData != null) {
+			// erase the old object
+			importErase(this.obj.id)
+			// record if selected
+			var selected = selection.includes(this.obj)
+			selection.splice(selection.indexOf(this.obj), 1)
+			// recreate the object
+			this.obj = SceneObject.createAndSendFromDataAndID(this.oldData, this.obj.id)
+			// re-select
+			if (selected) selection.push(this.obj)
+			updateSelectionWindow()
+		} else this.obj.revertToServer()
+	}
+	redo() {
+		// erase the old object
+		importErase(this.obj.id)
+		// record if selected
+		var selected = selection.includes(this.obj)
+		selection.splice(selection.indexOf(this.obj), 1)
+		// recreate the object
+		this.obj = SceneObject.createAndSendFromDataAndID(this.newData, this.obj.id)
+		// re-select
+		if (selected) selection.push(this.obj)
+		updateSelectionWindow()
+	}
+}
+
+/** @type {UndoStackItem[]} */
+var undo_stack = []
+/** @type {UndoStackItem[]} */
+var redo_stack = []
+
 var shiftKeyDown = false
 window.addEventListener("keydown", (e) => {
 	if (e.key == "Shift") shiftKeyDown = true
@@ -1078,7 +1188,59 @@ window.addEventListener("keydown", (e) => {
 		selection = [];
 		updateSelectionWindow();
 	}
+	if (e.ctrlKey) {
+		if (e.key == "z") undo()
+		if (e.key == "Z") redo()
+		if (e.key == "y") redo()
+		if (e.key == "Y") undo()
+	}
 })
 window.addEventListener("keyup", (e) => {
 	if (e.key == "Shift") shiftKeyDown = false
 })
+
+/**
+ * @param {UndoStackItem} item
+ */
+function doAction(item) {
+	item.redo()
+	undo_stack.push(item)
+	redo_stack = []
+	updateUndoButtons()
+}
+
+function undo() {
+	// Get item
+	var item = undo_stack.pop()
+	if (item == undefined) return
+	// Undo
+	item.undo()
+	// Add to redo stack
+	redo_stack.push(item)
+	// Update
+	updateUndoButtons()
+}
+function redo() {
+	// Get item
+	var item = redo_stack.pop()
+	if (item == undefined) return
+	// Redo
+	item.redo()
+	// Add back to undo stack
+	undo_stack.push(item)
+	// Update
+	updateUndoButtons()
+}
+function updateUndoButtons() {
+	// Undo Button
+	var u = document.querySelector("button[onclick='undo()']")
+	if (u == null) throw new Error("The undo button doesn't exist")
+	if (undo_stack.length == 0) u.setAttribute("disabled", "true")
+	else u.removeAttribute("disabled")
+	// Redo Button
+	var r = document.querySelector("button[onclick='redo()']")
+	if (r == null) throw new Error("The redo button doesn't exist")
+	if (redo_stack.length == 0) r.setAttribute("disabled", "true")
+	else r.removeAttribute("disabled")
+}
+updateUndoButtons()
