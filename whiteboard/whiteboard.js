@@ -86,13 +86,19 @@ document.querySelector(".menu")?.addEventListener("click", (event) => {
 		updateViewPos()
 		updateSelectionWindow()
 	}
+	// Draw Mode window
+	if (menuoption?.dataset.mode == "Draw") document.querySelector("#drawmode")?.classList.remove("hidden")
+	else document.querySelector("#drawmode")?.classList.add("hidden")
 }, false)
 
 var _requests = 0
+var _queuedRequests = 0
 async function staggerRequests() {
+	_queuedRequests += 1;
 	while (_requests >= 3) {
 		await new Promise((resolve) => setTimeout(resolve, 50));
 	}
+	_queuedRequests -= 1;
 	_requests += 1;
 	setTimeout(() => {
 		_requests -= 1;
@@ -592,6 +598,66 @@ function erase(pos) {
 	}
 }
 
+/**
+ * List of drawing modes.
+ * Each one takes in a list of stage points (drawn by the mouse),
+ * and returns another list of stage points (to display).
+ * @typedef {(points: { x: number, y: number}[]) => { x: number, y: number}[]} DrawingMode
+ * @type {Object<string, DrawingMode>}
+ */
+var drawingModes = {
+	"Normal": (points) => {
+		return points
+	},
+	"Line": (points) => {
+		return [
+			points[0],
+			points[points.length - 1]
+		]
+	},
+	"Rectangle": (points) => {
+		var start = points[0]
+		var end = points[points.length - 1]
+		return [
+			{ x: start.x, y: start.y },
+			{ x: end.x, y: start.y },
+			{ x: end.x, y: end.y },
+			{ x: start.x, y: end.y },
+			{ x: start.x, y: start.y }
+		]
+	},
+	"Circle": (points) => {
+		var start = points[0]
+		var end = points[points.length - 1]
+		var rx = Math.abs(end.x - start.x)
+		var ry = Math.abs(end.y - start.y)
+		var ravg = Math.sqrt((rx*rx) + (ry*ry))
+		// Generate points (by using Ellipse)
+		return drawingModes["Ellipse"]([
+			start,
+			{ x: start.x + ravg, y: start.y + ravg }
+		])
+	},
+	"Ellipse": (points) => {
+		var start = points[0]
+		var end = points[points.length - 1]
+		var rx = Math.abs(end.x - start.x)
+		var ry = Math.abs(end.y - start.y)
+		// Generate points
+		var ellipsePoints = [];
+		var resolution = 60;
+		for (var i = 0; i <= resolution; i++) {
+			var theta = 2 * Math.PI * (i / resolution);
+			ellipsePoints.push({
+				x: start.x + (rx * Math.cos(theta)),
+				y: start.y + (ry * Math.sin(theta))
+			});
+		}
+		return ellipsePoints;
+	}
+}
+var selectedDrawingMode = "Normal"
+
 class TrackedTouch {
 	/**
 	 * @param {number} initialX
@@ -652,7 +718,7 @@ class TrackedTouch {
 			if (color == null) throw new Error("draw color picker is missing :(")
 			if (! (color instanceof HTMLSelectElement)) throw new Error("draw color picker is weird looking :O")
 			return color.value
-		})())
+		})(), drawingModes[selectedDrawingMode])
 		if (mode == "Text") return new TextTouchMode(this)
 		if (mode == "Move") {
 			if (selection.length >= 1) return new MoveSelectionTouchMode(this)
@@ -699,8 +765,9 @@ class DrawTouchMode extends TouchMode {
 	/**
 	 * @param {TrackedTouch} touch
 	 * @param {string} color
+	 * @param {DrawingMode} drawing_mode
 	 */
-	constructor(touch, color) {
+	constructor(touch, color, drawing_mode) {
 		super(touch)
 		/** @type {{ x: number, y: number }[]} */
 		this.points = [getStagePosFromScreenPos(touch.x, touch.y)]
@@ -711,6 +778,7 @@ class DrawTouchMode extends TouchMode {
 		this.elm.setAttribute("stroke-width", "5")
 		theSVG.appendChild(this.elm)
 		this.color = color
+		this.drawing_mode = drawing_mode
 	}
 	/**
 	 * @param {number} previousX
@@ -720,7 +788,10 @@ class DrawTouchMode extends TouchMode {
 	 */
 	onMove(previousX, previousY, newX, newY) {
 		this.points.push(getStagePosFromScreenPos(this.touch.x, this.touch.y))
-		this.elm.setAttribute("d", pointsToPath(this.points.map((v) => getScreenPosFromStagePos(v.x, v.y))))
+		// Find points to display
+		var stagePoints = this.drawing_mode(this.points)
+		var screenPoints = stagePoints.map((v) => getScreenPosFromStagePos(v.x, v.y))
+		this.elm.setAttribute("d", pointsToPath(screenPoints))
 		// this.elm.setAttribute("stroke-width", (5 * viewPos.zoom).toString())
 	}
 	/**
@@ -734,7 +805,7 @@ class DrawTouchMode extends TouchMode {
 		if (this.points.length > 6) {
 			doAction(new USICreateObject({
 				"type": "drawing",
-				"d": this.points,
+				"d": this.drawing_mode(this.points),
 				"color": this.color
 			}))
 		}

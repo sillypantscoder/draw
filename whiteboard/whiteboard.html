@@ -81,7 +81,7 @@ textarea.unverified {
 .selection-window.active {
 	bottom: 0em;
 }
-#selection-s.hidden {
+#selection-s.hidden, #drawmode.hidden {
 	display: none;
 }
 .selection-window button {
@@ -110,6 +110,13 @@ textarea.unverified {
 		</div>
 		<div class="menu" style="left: 8em; padding: 1em;">
 			<div style="color: white;">Mode: <b id="mode-output">Draw</b></div>
+			<div style="color: white;" id="drawmode">Drawing Mode: <select oninput="selectedDrawingMode = event.target.value; event.target.blur()">
+				<option selected>Normal</option>
+				<option>Line</option>
+				<option>Rectangle</option>
+				<option>Circle</option>
+				<option>Ellipse</option>
+			</select></div>
 			<div><select id="draw-color" oninput="this.blur()">
 				<option value="black" selected>Black</option>
 				<option value="red">Red</option>
@@ -118,6 +125,7 @@ textarea.unverified {
 				<option value="#cc1">Dark Yellow</option>
 				<option value="green">Dark Green</option>
 				<option value="lime">Light Green</option>
+				<option value="cyan">Cyan</option>
 				<option value="blue">Blue</option>
 				<option value="purple">Dark Purple</option>
 				<option value="#80f">Purple</option>
